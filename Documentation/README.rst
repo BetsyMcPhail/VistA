@@ -51,11 +51,10 @@ other auxiliary programs:
   * ObtainingTestingCode_
 
 If the VistA instance to be generate is going to be imported from the OSEHRA
-VistA-M repository, see the two following files for instructions on obtaining
-and preparing the M code for import:
+VistA-M repository, see the following file for instructions on obtaining and
+preparing the M code for import:
 
  * ObtainingVistAMCode_
- * PrepareMComponents_
 
 For the next sections, follow the instructions based upon which type of
 MUMPS database will be utilized for the VistA installation:
@@ -78,7 +77,7 @@ Caché
         Alternatively, for the instructions to import the MUMPS code from the
         OSEHRA VistA-M Repository into a Caché instance, see:
 
-        * ImportCache_
+        * AutomatedVistAConfiguration_
 
   Instructions for additional configuration of the Caché environment can be
   found here:
@@ -93,7 +92,7 @@ GT.M
 
   And to import the OSEHRA VistA-M code into the GT.M environment, see
 
-  * ImportGTM_
+  * AutomatedVistAConfiguration_
 
 The last sections are common to both types of systems and utilize the OSEHRA
 Testing Harness:
@@ -109,12 +108,6 @@ Once the tests have been run and submitted, the results can be seen on the
 OSEHRA Dashboard, for more information see:
 
   * ReviewingResults_
-
-The import and simple configuration of the M components of VistA has been
-automated. See the following file for the information needed to set up this
-utility.
-
-  * AutomatedVistAConfiguration_
 
 For initialization and setup of an imported VistA instance (general setup and
 adding a user)  without using the OSEHRA Utilities, see:
@@ -196,7 +189,6 @@ directory and includes:
 .. _AddingTests: AddingTests.rst
 .. _ReviewingResults: ReviewingResults.rst
 .. _AutomatedVistAConfiguration: AutomatedVistAConfiguration.rst
-.. _PrepareMComponents: PrepareMComponents.rst
 .. _Initialization: Initialization.rst
 .. _Vagrant: http://www.vagrantup.com
 .. _Overview: Install/Vagrant.rst
