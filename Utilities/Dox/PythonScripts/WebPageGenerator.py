@@ -806,7 +806,7 @@ class WebPageGenerator:
 
                 icrList = self.queryICRInfo(package.getName().upper(),"GLOBAL", globalName[1:])
                 if icrList:
-                  indexList.append("ICR Entities")
+                    indexList.append("ICR Entries")
 
                 outputFile.write("<script>var titleList = "+str(indexList)+"</script>\n")
                 outputFile.write("")
@@ -863,7 +863,7 @@ class WebPageGenerator:
                     self.__generateFileManFileDetails__(globalVar, outputFile)
                     writeSectionEnd(outputFile)
                 if icrList:
-                   writeSectionHeader("ICR Entities","ICR Entities",outputFile)
+                   writeSectionHeader("ICR Entries", "ICR Entries", outputFile)
                    self.generateGlobalICRSection(icrList,outputFile)
                    writeSectionEnd(outputFile)
                 generateIndexBar(outputFile, indexList)
@@ -1122,7 +1122,7 @@ class WebPageGenerator:
         row.append(fieldsReferenced)
         row.append(description)
         icrTable.append(row)
-      self.writeGenericTablizedHtmlData(headerList, icrTable, outfile,classid="dbaicrconnections")
+      self.writeGenericTablizedHtmlData(headerList, icrTable, outfile, classid="icrVals")
 
     def _updatePackageDepDict(self, package, depDict, packDepDict):
         for depPack in depDict.iterkeys():
@@ -1961,13 +1961,13 @@ class WebPageGenerator:
     def writeGenericTablizedHtmlData(self, headerList, itemList, outputFile, classid="" ):
         outputFile.write("<div><table>\n")
         if headerList and len(headerList) > 0:
-            outputFile.write("<tr>\n")
+            outputFile.write("<tr class=\"%s\">\n" % classid)
             for header in headerList:
-                outputFile.write("<th class=\"%s IndexKey\">%s</th>\n" % (classid, header))
+                outputFile.write("<th class=IndexKey>%s</th>\n" % header)
             outputFile.write("</tr>\n")
         if itemList and len(itemList) > 0:
             for itemRow in itemList:
-                outputFile.write("<tr>\n")
+                outputFile.write("<tr class=\"%s\">\n" % classid)
                 for data in itemRow:
                     outputFile.write("<td class=\"%s IndexValue\">%s</td>\n" % (classid, data))
                 outputFile.write("</tr>\n")

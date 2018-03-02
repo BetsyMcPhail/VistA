@@ -211,8 +211,7 @@ var titleDic  =  {
   "Local Variables":{"tag": "local","sep": /\s{4}/,"generator":getTableListWithHeader,"numCols":2,"stretchColumn":1},
   "Interaction Calls":{"tag": "interactioncalls","sep": /\s{4}/,"generator":getTableListWithHeader,"numCols":2,"stretchColumn":1},
   "Marked Items":{"tag": "marked","sep": /\s{4}/,"generator":getTableListWithHeader,"numCols":2,"stretchColumn":1},
-  // TODO: Need an example that uses this section. Not tested
-  "FileMan Files Accessed Via FileMan Db Call":{"tag": "dbcall","sep": /\s{4}/,"generator":getTableListWithHeader,"numCols":3},
+  "FileMan Files Accessed Via FileMan Db Call":{"tag": "dbcall","sep": /\s{4}/,"generator":getTableListWithHeader,"numCols":2},
 
   // Summary Pages
 
