@@ -36,6 +36,7 @@ if(NOT EXISTS ${DOCUMENT_VISTA_OUTPUT_DIR})
   message(WARNING "DOCUMENT_VISTA_OUTPUT_DIR is required.")
 endif()
 
+set(DOCUMENT_VISTA_ICR_OUTPUT_DIR "${DOCUMENT_VISTA_OUTPUT_DIR}/ICR")
 set(ICR_FILE "" CACHE FILEPATH "ICR File from http://foia-vista.osehra.org/VistA_Integration_Agreement/")
 if(NOT EXISTS ${ICR_FILE})
   message(WARNING "ICR_FILE is required.")
@@ -44,7 +45,6 @@ else()
   get_filename_component(ICR_JSON_FILE ${ICR_FILE} NAME_WE)
   set(ICR_JSON_FILE "${DOCUMENT_VISTA_OUTPUT_DIR}/${ICR_JSON_FILE}.JSON")
 endif()
-
 
 set(DOCUMENT_VISTA_DOX_OUTPUT_DIR "${DOCUMENT_VISTA_OUTPUT_DIR}/dox")
 set(DOCUMENT_VISTA_PDF_OUTPUT_DIR "${DOCUMENT_VISTA_DOX_OUTPUT_DIR}/PDF")
@@ -73,6 +73,10 @@ endif()
 
 if (NOT GENERATE_DOX AND NOT GENERATE_VIVIAN)
   message(ERROR "Must select GENERATE_DOX and/or GENERATE_VIVIAN.")
+endif()
+
+if (NOT GENERATE_DOX AND GENERATE_PDF_BUNDLE)
+  message(ERROR "Must select GENERATE_DOX to generate PDF Bundle")
 endif()
 
 set(SCRIPT_OUTPUT_DIR "${CMAKE_BINARY_DIR}/Docs/CallerGraph")
