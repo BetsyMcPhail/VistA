@@ -451,8 +451,8 @@ def getRoutineSourceHtmlFileName(routineName):
 
 # generate Indexed Page Table Row
 def generateIndexedTableRow(outputFile, inputList, httpLinkFunction,
-                            nameFunc=None, indexSet=set(char for char in string.uppercase)):
     if not inputList or len(inputList) == 0:
+                            nameFunc, indexSet):
         return
     outputFile.write("<tr>")
     for item in inputList:
@@ -470,25 +470,6 @@ def generateIndexedTableRow(outputFile, inputList, httpLinkFunction,
                              (httpLinkFunction(item),
                               displayName))
     outputFile.write("</tr>\n")
-
-def generateIndexedPackageTableRow(outputFile, inputList,
-                                   nameFunc=None, indexSet=set(char for char in string.uppercase)):
-    generateIndexedTableRow(outputFile, inputList, getPackageHtmlFileName,
-                            nameFunc, indexSet)
-
-def generateIndexedRoutineTableRow(outputFile, inputList,
-                                   nameFunc=None, indexSet=set(char for char in string.uppercase)):
-    generateIndexedTableRow(outputFile, inputList, getRoutineHtmlFileName,
-                            nameFunc, indexSet)
-def generateIndexedPackageComponentTableRow(outputFile, inputList,
-                                   nameFunc=None, indexSet=set(char for char in string.uppercase)):
-    generateIndexedTableRow(outputFile, inputList, getPackageObjHtmlFileName,
-                            nameFunc, indexSet)
-def generateIndexedGlobalTableRow(outputFile, inputList,
-                                  nameFunc=None, indexSet=set(char for char in string.uppercase)):
-    generateIndexedTableRow(outputFile, inputList, getGlobalHtmlFileNameByName,
-                            nameFunc, indexSet)
-
 
 
 def getPackagePackageDependencyHyperLink(packageName, depPackageName, name,
@@ -902,7 +883,10 @@ class WebPageGenerator:
             for j in range(totalCol):
                 if (i + numPerCol * j) < totalGlobals:
                     itemsPerRow.append(sortedGlobals[i + numPerCol * j][1]);
-            generateIndexedGlobalTableRow(outputFile, itemsPerRow)
+            generateIndexedTableRow(outputFile, itemsPerRow,
+                                    getGlobalHtmlFileNameByName,
+                                    None,
+                                    set(char for char in string.uppercase))
         outputFile.write("</table>\n</div>\n")
         self.generateIndexNavigationBar(outputFile, string.uppercase)
         outputFile.write(FOOTER)
@@ -2248,9 +2232,10 @@ class WebPageGenerator:
                 if (i + numPerCol * j) < totalRoutines:
                     item = sortedRoutines[i + numPerCol * j]
                     itemsPerRow.append(item);
-            generateIndexedRoutineTableRow(outputFile, itemsPerRow,
-                                           self.getRoutineDisplayNameByName,
-                                           indexSet)
+            generateIndexedTableRow(outputFile, itemsPerRow,
+                                    getRoutineHtmlFileName,
+                                    self.getRoutineDisplayNameByName,
+                                    indexSet)
         outputFile.write("</table>\n</div>\n")
         self.generateIndexNavigationBar(outputFile, indexList)
         outputFile.write(FOOTER)
@@ -2305,7 +2290,10 @@ class WebPageGenerator:
             for j in range(totalCol):
                 if (i + numPerCol * j) < totalNumPackages:
                     itemsPerRow.append(sortedPackages[i + j * numPerCol]);
-            generateIndexedPackageTableRow(outputFile, itemsPerRow)
+            generateIndexedTableRow(outputFile, itemsPerRow,
+                                    getPackageHtmlFileName,
+                                    None,
+                                    set(char for char in string.uppercase))
         outputFile.write("</table>\n</div>\n")
         self.generateIndexNavigationBar(outputFile, string.uppercase)
         outputFile.write(FOOTER)
@@ -3795,9 +3783,10 @@ class WebPageGenerator:
                 if (i + numPerCol * j) < totalComponents:
                     item = sortedComponents[i + numPerCol * j]
                     itemsPerRow.append(item);
-            generateIndexedPackageComponentTableRow(outputFile, itemsPerRow,
-                                           self.getPackageComponentDisplayName,
-                                           indexSet)
+            generateIndexedTableRow(outputFile, itemsPerRow,
+                                    getPackageObjHtmlFileName,
+                                    self.getPackageComponentDisplayName,
+                                    indexSet)
         outputFile.write("</table>\n</div>\n")
         self.generateIndexNavigationBar(outputFile, indexList)
         outputFile.write('</div>')
