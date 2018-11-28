@@ -14,36 +14,24 @@
 # limitations under the License.
 #---------------------------------------------------------------------------
 
-import xlrd
-from xlrd import open_workbook,cellname,xldate_as_tuple
-from datetime import datetime, date, time
-import csv
+from datetime import datetime
 import json
 import re
-import sys
+import xlrd
+from xlrd import xldate_as_tuple
 
-rootNode = {}
-rootNode["None"] = []
-
-typeDict = {
-  xlrd.XL_CELL_NUMBER: "Number",
-  xlrd.XL_CELL_TEXT: "Text",
-  xlrd.XL_CELL_DATE: "Date",
-  xlrd.XL_CELL_BLANK: "Blank",
-  xlrd.XL_CELL_EMPTY: "Empty",
-  xlrd.XL_CELL_ERROR: "Error",
-  xlrd.XL_CELL_BOOLEAN: "Boolean",
-}
+ROOT_NODE = {}
+ROOT_NODE["None"] = []
 
 def convertToInt(value,index):
   try:
     return int(value)
-  except ValueError as ve:
+  except ValueError:
     return value
 
 def convertToDate(value):
-  date_value = xldate_as_tuple(value, 0)
-  return datetime(*date_value).strftime("%Y-%m-%d")
+  dateValue = xldate_as_tuple(value, 0)
+  return datetime(*dateValue).strftime("%Y-%m-%d")
 
 def convertToBool(value):
   if value:
@@ -54,6 +42,7 @@ def convertToBool(value):
 def checkEmpty(value, index):
   if index == 5:
     return ["None"]
+  # TODO: Need to return something here
 
 def parseStringVal(value, index):
   if index == 5:
@@ -62,22 +51,22 @@ def parseStringVal(value, index):
       bffValue = bffValue.strip()
       if re.match(',[ ]*',bffValue) or (bffValue == ''):
         continue
-      if not (bffValue in returnArray):
-        returnArray.append(bffValue);
-      if not (bffValue in rootNode):
-        rootNode[bffValue] = []
+      if not bffValue in returnArray:
+        returnArray.append(bffValue)
+      if not bffValue in ROOT_NODE:
+        ROOT_NODE[bffValue] = []
     return returnArray
   elif index == 4:
     returnArray=[]
     for nsrEntry in value.split("\n"):
-      if not (nsrEntry in returnArray):
-        returnArray.append(nsrEntry);
+      if not nsrEntry in returnArray:
+        returnArray.append(nsrEntry)
     return returnArray
-  if not (value.find(" [") == -1):
+  if not value.find(" [") == -1:
     return value[:value.find(" [")]
   return value
 
-typeDictConvert = {
+TYPE_DICT_CONVERT = {
   xlrd.XL_CELL_NUMBER: convertToInt,
   xlrd.XL_CELL_TEXT: parseStringVal,
   xlrd.XL_CELL_DATE: convertToDate,
@@ -88,7 +77,7 @@ typeDictConvert = {
 }
 
 # convert the excel name fields to standard json output name
-RequirementsFieldsConvert = {
+REQUIREMENTS_FIELDS_CONVERT = {
   "RDM RDNG ID" : 'busNeedId',
   "ID" : 'busNeedId',
   "ARTIFACT TYPE" : 'type',
@@ -103,10 +92,10 @@ RequirementsFieldsConvert = {
   "Associated BFF(s)":"BFFlink"
 }
 
-def checkReqForUpdate(curNode,pastJSONObj,curDate):
-  diffFlag=False
+def checkReqForUpdate(curNode, pastJSONObj, curDate):
+  diffFlag = False
   foundDate = curDate
-  noHistory=False;
+  noHistory = False
   BFFList = []
   if type(curNode['BFFlink']) is list:
     for BFFlink in curNode['BFFlink']:
@@ -117,8 +106,8 @@ def checkReqForUpdate(curNode,pastJSONObj,curDate):
   # Remove all recentUpdate attributes
   for BFFEntry in BFFList:
     if pastJSONObj:
-      diffFlag=False;
-      noHistory=False;
+      diffFlag = False
+      noHistory = False
       if BFFEntry in pastJSONObj:
         ret = filter(lambda x: x['name'] == curNode['name'] , pastJSONObj[BFFEntry])
         if ret:
@@ -134,9 +123,10 @@ def checkReqForUpdate(curNode,pastJSONObj,curDate):
               if type(oldVal) == list:
                 oldVal.sort()
                 newVal.sort()
-              if not (oldVal == newVal):
+              if not oldVal == newVal:
                 diffFlag= True
           else:
+            # TODO: We'll never get here (no break in loop)
             noHistory = True
     if diffFlag:
       curNode['recentUpdate'] = "Update"
@@ -144,26 +134,25 @@ def checkReqForUpdate(curNode,pastJSONObj,curDate):
     else:
       curNode['recentUpdate'] = "None" if (noHistory) else "New Requirement"
       curNode['dateUpdated']= foundDate
-    rootNode[BFFEntry].append(curNode)
+    ROOT_NODE[BFFEntry].append(curNode)
 
-def RequirementsFieldsConvertFunc(x):
-  if x in RequirementsFieldsConvert:
-    return RequirementsFieldsConvert[x]
+def requirementsFieldsConvertFunc(x):
+  if x in REQUIREMENTS_FIELDS_CONVERT:
+    return REQUIREMENTS_FIELDS_CONVERT[x]
   return x
 
-def convertExcelToJson(input, output,pastData,curDate):
+def convertExcelToJson(filename, output, pastData, curDate):
   pastJSONObj={}
   if pastData:
     with open(pastData,"r") as pastJSON:
       pastJSONObj = json.load(pastJSON)
-  book = open_workbook(input)
+  book = xlrd.open_workbook(filename)
   sheet = book.sheet_by_index(0)
   data_row = 1
   row_index= 0
   fields = None
-  all_nodes = dict(); # all the nodes
   fields = sheet.row_values(row_index)
-  fields = map(RequirementsFieldsConvertFunc, fields)
+  fields = map(requirementsFieldsConvertFunc, fields)
   # Read rest of the BFF data from data_row
   for row_index in xrange(data_row, sheet.nrows):
     curNode = dict()
@@ -171,8 +160,7 @@ def convertExcelToJson(input, output,pastData,curDate):
     curNode['isRequirement'] = True
     for col_index in xrange(sheet.ncols):
       cell = sheet.cell(row_index, col_index)
-      cType = cell.ctype
-      convFunc = typeDictConvert.get(cell.ctype)
+      convFunc = TYPE_DICT_CONVERT.get(cell.ctype)
       cValue = cell.value
       if type(cValue) == unicode:
         cValue = re.sub(r'[^\x00-\x7F]+','', cValue) #cValue.decode('unicode_escape').encode('ascii','ignore')
@@ -184,4 +172,4 @@ def convertExcelToJson(input, output,pastData,curDate):
     checkReqForUpdate(curNode,pastJSONObj,curDate)
 
   with open(output, "w") as outputJson:
-    json.dump(rootNode, outputJson)
+    json.dump(ROOT_NODE, outputJson)

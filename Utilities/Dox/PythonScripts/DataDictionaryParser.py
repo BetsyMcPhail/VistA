@@ -18,20 +18,17 @@
 # limitations under the License.
 #----------------------------------------------------------------
 
+import argparse
 import glob
-import re
 import os
 import os.path
-import sys
-import subprocess
 import re
-import csv
-import argparse
 
-from datetime import datetime, date, time
-from CrossReference import CrossReference, Routine, Package, Global, PlatformDependentGenericRoutine
+from CrossReference import CrossReference
 from CrossReference import FileManField, FileManFile, FileManFieldFactory
-from CrossReference import LocalVariable, GlobalVariable, NakedGlobal, MarkedItem, LabelReference
+from CrossReference import Global, GlobalVariable, LabelReference
+from CrossReference import LocalVariable, MarkedItem, NakedGlobal
+from CrossReference import Package, PlatformDependentGenericRoutine, Routine
 
 from LogManager import logger
 
@@ -47,26 +44,29 @@ POINTED_TO_BY_VALUE_REGEX = re.compile("field \(#(?P<fieldNo>[0-9.]+)\) (of the 
 class IDDSectionParser:
     def __init__(self):
         pass
-    def onSectionStart(self, line, section, Global, CrossReference):
+    def onSectionStart(self, line, section, globalVar, crossRef):
         pass
-    def onSectionEnd(self, line, section, Global, CrossReference):
+    def onSectionEnd(self, line, section, globalVar, crossRef):
         pass
-    def parseLine(self, line, Global, CrossReference):
+    def parseLine(self, line, globalVar, crossRef):
         pass
+
 class DescriptionSectionParser(IDDSectionParser):
     def __init__(self):
         self._lines=None
         self._curLine = None
         self._section = IDataDictionaryListFileLogParser.DESCRIPTION_SECTION
-    def onSectionStart(self, line, section, Global, CrossReference):
+
+    def onSectionStart(self, line, section, globalVar, crossRef):
         self._lines=[]
         self._curLine = ""
-    def onSectionEnd(self, line, section, Global, CrossReference):
+
+    def onSectionEnd(self, line, section, globalVar, crossRef):
         if self._curLine:
             self._lines.append(self._curLine)
-        Global.setDescription(self._lines)
+        globalVar.setDescription(self._lines)
 
-    def parseLine(self, line, Global, CrossReference):
+    def parseLine(self, line, globalVar, crossRef):
         if not line.strip(): # assume this is the paragraph break
             if not self._curLine:
                 self._lines.append(self._curLine)
@@ -152,30 +152,29 @@ class FileManFieldSectionParser(IDDSectionParser):
         self._field = None
         self._isSubFile = False
 
-    def onSectionStart(self, line, section, Global, CrossReference):
+    def onSectionStart(self, line, section, globalVar, crossRef):
         self._lines = []
         result = DataDictionaryListFileLogParser.FILEMAN_FIELD_START.search(line)
         assert result
         fileNo = result.group('FileNo')
         fieldNo = result.group("FieldNo")
-        self._isSubFile = float(fileNo) != float(Global.getFileNo())
+        self._isSubFile = float(fileNo) != float(globalVar.getFileNo())
         if self._isSubFile:
-            self._curFile = Global.getSubFileByFileNo(fileNo)
-            assert self._curFile, "Could not find subFile [%s] in file [%s] line [%s]" % (fileNo, Global.getFileNo(), line)
+            self._curFile = globalVar.getSubFileByFileNo(fileNo)
+            assert self._curFile, "Could not find subFile [%s] in file [%s] line [%s]" % (fileNo, globalVar.getFileNo(), line)
         else:
-            self._curFile = Global
+            self._curFile = globalVar
         restOfLineStart = line.find("," + fieldNo) + len(fieldNo)
-        startIdent = self.DEFAULT_NAME_INDENT
         defaultIdentLevel = self.__getDefaultIndentLevel__(self._curFile, self.DEFAULT_NAME_INDENT)
         if restOfLineStart > defaultIdentLevel:
             logger.warning("FileNo: %s, FieldNo: %s, line: %s, may not be a valid field no, %d, %d" %
                             (fileNo, fieldNo, line, restOfLineStart, defaultIdentLevel))
             try:
-                floatValue = float(fieldNo)
+                float(fieldNo)
             except ValueError:
                 logger.error("invalid fieldNo %s" % fieldNo)
                 fieldNo = line[line.find(",")+1:defaultIdentLevel]
-                floatValue = float(fieldNo)
+                float(fieldNo)
         restOfLine = line[line.find("," + fieldNo) + len(fieldNo)+1:].strip()
         result = NAME_LOC_TYPE_REGEX.search(restOfLine)
         fName, fType, fLocation = None, None, None
@@ -207,29 +206,32 @@ class FileManFieldSectionParser(IDDSectionParser):
         if fType:
             stripedType = self.__stripFieldAttributes__(fType)
         if stripedType:
-            self.__createFieldByType__(fieldNo, stripedType, fName, fLocation, line, Global, CrossReference)
+            self.__createFieldByType__(fieldNo, stripedType, fName, fLocation,
+                                       line, globalVar, crossRef)
         else:
-            self._field = FileManFieldFactory.createField(fieldNo, fName, FileManField.FIELD_TYPE_NONE, fLocation)
+            self._field = FileManFieldFactory.createField(fieldNo, fName,
+                                                          FileManField.FIELD_TYPE_NONE,
+                                                          fLocation)
         self._curFile.addFileManField(self._field)
         if stripedType:
             self.__parseFieldAttributes__(fType)
 
-    def onSectionEnd(self, line, section, Global, CrossReference):
+    def onSectionEnd(self, line, section, globalVar, crossRef):
         if not self._lines:
             pass
         #elif self._isSubFilePointer and self._pointedToSubFile:
         #    self.__parsingSubFileDescription__()
         elif self._field.isVariablePointerType():
-            self.__parsingVariablePointer__(Global, CrossReference)
+            self.__parsingVariablePointer__(globalVar, crossRef)
         elif self._field.isSetType():
-            self.__parsingSetTypeDetails__(Global)
+            self.__parsingSetTypeDetails__(globalVar)
         # this is to parse the field details part
         self.__parseFieldDetails__()
         # this is to find out how many subfileds in the schema file
         #self.__findTotalSubFileds__()
         self.__resetVar__()
 
-    def parseLine(self, line, Global, CrossReference):
+    def parseLine(self, line, globalVar, crossRef):
         if not self._lines:
             self._lines=[]
         self._lines.append(line)
@@ -296,7 +298,8 @@ class FileManFieldSectionParser(IDDSectionParser):
                 else:
                     break
         self._pointedToSubFile.setDescription(description)
-    def __parsingSetTypeDetails__(self, Global):
+
+    def __parsingSetTypeDetails__(self, globalVar):
         index, detailList, found = 0, None, False
         indentValue = self.__getDefaultIndentLevel__(self._curFile,
                                                      self.DEFAULT_VALUE_INDENT)
@@ -317,7 +320,8 @@ class FileManFieldSectionParser(IDDSectionParser):
                 else:
                     break
         self._field.setSetMembers(detailList)
-    def __parsingVariablePointer__(self, Global, CrossReference):
+
+    def __parsingVariablePointer__(self, globalVar, crossRef):
         index, fileList, found = 0, None, False
         indentValue = self.__getDefaultIndentLevel__(self._curFile,
                                                      self.DEFAULT_NAME_INDENT)
@@ -333,16 +337,17 @@ class FileManFieldSectionParser(IDDSectionParser):
                 else:
                     result = FILE_REGEX.search(self._lines[index])
                     if result:
-                        filePointedTo = CrossReference.getGlobalByFileNo(result.group('File'))
+                        filePointedTo = crossRef.getGlobalByFileNo(result.group('File'))
                         if not filePointedTo:
                             # log an error for now, will handle this case later
-                            logger.error("INVALID File! File is %s, Global is %s" % (result.group('File'), Global))
+                            logger.error("INVALID File! File is %s, Global is %s" % (result.group('File'), globalVar))
                             continue
                         if not fileList: fileList = []
                         fileList.append(filePointedTo)
         self._field.setPointedToFiles(fileList)
 
-    def __createFieldByType__(self, fieldNo, fType, fName, fLocation, line, Global, CrossReference):
+    def __createFieldByType__(self, fieldNo, fType, fName, fLocation, line,
+                              globalVar, crossRef):
         result = UNDEFINED_POINTER.search(fType)
         if result:
             self._field = FileManFieldFactory.createField(fieldNo, fName,
@@ -351,7 +356,7 @@ class FileManFieldSectionParser(IDDSectionParser):
         result = POINTER_TO_REGEX.search(fType)
         if result:
             fileNo = result.group('File')
-            filePointedTo = CrossReference.getGlobalByFileNo(fileNo)
+            filePointedTo = crossRef.getGlobalByFileNo(fileNo)
             self._field = FileManFieldFactory.createField(fieldNo, fName,
                                                           FileManField.FIELD_TYPE_FILE_POINTER,
                                                           fLocation)
@@ -368,14 +373,14 @@ class FileManFieldSectionParser(IDDSectionParser):
                                                           FileManField.FIELD_TYPE_SUBFILE_POINTER,
                                                           fLocation)
             fileNo = result.group('File')
-            subFile = Global.getSubFileByFileNo(fileNo)
+            subFile = globalVar.getSubFileByFileNo(fileNo)
             if not subFile: # this is a new subfile
                 subFile = FileManFile(fileNo, fName, self._curFile)
                 self._curFile.addFileManSubFile(subFile)
                 if self._isSubFile:
-                    Global.addFileManSubFile(subFile)
+                    globalVar.addFileManSubFile(subFile)
             self._field.setPointedToSubFile(subFile)
-            CrossReference.addFileManSubFile(subFile)
+            crossRef.addFileManSubFile(subFile)
             return
         for (key, value) in self.StringTypeMappingDict.iteritems():
             if fType.startswith(key):
@@ -387,7 +392,8 @@ class FileManFieldSectionParser(IDDSectionParser):
               fType = line[self.MAXIMIUM_TYPE_START_INDEX:]
               if fLocation:
                   fLocation = line[line.find(fLocation):self.MAXIMIUM_TYPE_START_INDEX]
-              self.__createFieldByType__(fieldNo, fType, fName, fLocation, line, Global, CrossReference)
+              self.__createFieldByType__(fieldNo, fType, fName, fLocation,
+                                         line, globalVar, crossRef)
         assert self._field, "Could not find the right type for %s, %s, %s, %s, %s" % (fType, fLocation, fieldNo, line, self._curFile.getFileNo())
 
     def __stripFieldAttributes__(self, fType):
@@ -418,17 +424,19 @@ class PointedToBySectionParser(IDDSectionParser):
     POINTED_TO_BY_VALUE_INDEX = 15
 
     def __init__(self):
-        self._global = None
+        self.globalVar = None
         self._section = IDataDictionaryListFileLogParser.POINTED_TO_BY_SECTION
-    def onSectionStart(self, line, section, Global, CrossReference):
+    def onSectionStart(self, line, section, globalVar, crossRef):
         assert self._section == section
-        self._global = Global
-        self.parseLine(line, Global, CrossReference)
-    def onSectionEnd(self, line, section, Global, CrossReference):
+        self.globalVar = globalVar
+        self.parseLine(line, globalVar, crossRef)
+
+    def onSectionEnd(self, line, section, globalVar, crossRef):
         assert self._section == section
-        self._global = None
-    def parseLine(self, line, Global, CrossReference):
-        assert self._global
+        self.globalVar = None
+
+    def parseLine(self, line, globalVar, crossRef):
+        assert self.globalVar
         strippedLine = line.rstrip(" ")
         if not strippedLine:
             return
@@ -438,14 +446,14 @@ class PointedToBySectionParser(IDDSectionParser):
             fileManNo = result.group("FileNo")
             fieldNo = result.group('fieldNo')
             subFileNo = result.group('subFieldNo')
-            pointedByGlobal = CrossReference.getGlobalByFileNo(fileManNo)
+            pointedByGlobal = crossRef.getGlobalByFileNo(fileManNo)
             if pointedByGlobal:
-                self._global.addPointedToByFile(pointedByGlobal, fieldNo, subFileNo)
+                self.globalVar.addPointedToByFile(pointedByGlobal, fieldNo, subFileNo)
             else:
                 logger.warning("Could not find global based on %s, %s" %
                                (fileManNo, result.group("Name")))
         else:
-            logger.error("Could not parse pointer reference [%s] in file [%s]" % (line, self._global.getFileNo()))
+            logger.error("Could not parse pointer reference [%s] in file [%s]" % (line, self.globalVar.getFileNo()))
 
 class IDataDictionaryListFileLogParser:
     # Enum for section value
@@ -509,9 +517,9 @@ class DataDictionaryListFileLogParser(IDataDictionaryListFileLogParser):
     SORT_TEMPLATE_START = re.compile("^SORT TEMPLATE\(S\):$")
     FORM_BLOCKS_START = re.compile("^FORM\(S\)/BLOCK\(S\):$")
 
-    def __init__(self, CrossReference):
-        assert CrossReference
-        self._crossRef = CrossReference
+    def __init__(self, crossRef):
+        assert crossRef
+        self._crossRef = crossRef
         self._curSect = None
         self._curParser = None
         self._curGlobal = None

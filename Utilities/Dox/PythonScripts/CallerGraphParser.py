@@ -17,21 +17,18 @@
 # limitations under the License.
 #----------------------------------------------------------------
 
-import glob
-import re
-import os
-import json
-import os.path
-import sys
-import subprocess
-import re
-import csv
 import argparse
+import csv
+import glob
+import json
+import os
+import os.path
+import re
 
-from datetime import datetime, date, time
-from CrossReference import CrossReference, Routine, Package, Global, PlatformDependentGenericRoutine, PackageComponent #Option, Function
-from CrossReference import LocalVariable, GlobalVariable, NakedGlobal, MarkedItem, LabelReference
-from CrossReference import RoutineCallInfo, getAlternateGlobalName, getTopLevelGlobalName
+from CrossReference import CrossReference, Global, GlobalVariable, LabelReference
+from CrossReference import LocalVariable, MarkedItem, NakedGlobal
+from CrossReference import Package, PackageComponent, PlatformDependentGenericRoutine
+from CrossReference import Routine, RoutineCallInfo, getAlternateGlobalName
 
 from LogManager import logger
 
@@ -62,9 +59,9 @@ GLOBAL_NAME_LOCATION = re.compile("(?P<globalName>^ +\^[A-Z]+[(][0-9.]+)+(?P<loc
 
 SECTION_HEADER_REGEX = []
 
-sectHandleDict = []
-# some dicts for easy lookup
-PackageComponentInfoDict  = {
+SECT_HANDLE_DICT = []
+
+PACKAGE_COMPONENT_INFO_DICT  = {
       "func": {"_fileNumber": ".5", "_nameLocation":".01", "_headerIndex":6, "_curKey":"Function"},
       "opt": {"_fileNumber": "19", "_nameLocation":".01", "_headerIndex":6, "_curKey":"Option"},
       "sort": {"_fileNumber":".401", "_nameLocation":".01", "_headerIndex":6, "_curKey":"Sort_Template"},
@@ -80,58 +77,26 @@ PackageComponentInfoDict  = {
       "rpc": {"_fileNumber": "8994", "_nameLocation":".01", "_headerIndex":6, "_curKey":"Remote_Procedure"},
 }
 
-packageNameMismatchDict = {"NOIS TRACKING":"NATIONAL ONLINE INFORMATION SHARING",
-                         "HEALTH DATE & INFORMATICS":"HEALTH DATA & INFORMATICS",
-                         "CM TOOLS":"CAPACITY MANAGEMENT TOOLS",
-                         "HIPPA":"E CLAIMS MGMT ENGINE",
-                         "WOUNDED INJURED & ILL":"WOUNDED INJURED & ILL WARRIORS",
-                         "VISTA DATA EXTRACTION":"VDEF",
-                         "VISTA LINK":"VISTALINK",
-                         "BLOOD BANK":"VBECS"}
 structuredSource=[]
 
-def checkCSVDeps(self,CrossReference,optionText,keyVal):
-  if CrossReference._inputTemplateDeps:
-    if (keyVal == "Input_Template") and (optionText in CrossReference._inputTemplateDeps):
-      for entry in CrossReference._inputTemplateDeps[optionText]:
-        foundGlobal = CrossReference.getGlobalByFileNo(entry[3])
-        if foundGlobal:
-          self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
-                                      "",
-                                      "RJ"))
-  if CrossReference._sortTemplateDeps:
-    if (keyVal == "Sort_Template") and (optionText in CrossReference._sortTemplateDeps):
-      for entry in CrossReference._sortTemplateDeps[optionText]:
-        foundGlobal = CrossReference.getGlobalByFileNo(entry[3])
-        if foundGlobal:
-          self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
-                                      "",
-                                      "RJ"))
-  if CrossReference._printTemplateDeps:
-    if (keyVal == "Print_Template") and (optionText in CrossReference._printTemplateDeps):
-      for entry in CrossReference._printTemplateDeps[optionText]:
-        foundGlobal = CrossReference.getGlobalByFileNo(entry[3])
-        if foundGlobal:
-          self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
-                                      "",
-                                      "RJ"))
 #===============================================================================
 # Interface to parse a section of the XINDEX log file
 #===============================================================================
 class ISectionParser:
     def __init__(self):
         pass
-    def onSectionStart(self, line, section, crossRef):
+    def onSectionStart(self, curLine, sectionHeader, crossRef):
         pass
-    def onSectionEnd(self, line, section, Routine, CrossReference):
+    def onSectionEnd(self, line, section, routine, crossRef):
         pass
-    def parseLine(self, line, Routine, CrossReference):
+    def parseLine(self, line, routine, crossRef):
         pass
 #===============================================================================
 # Default Implementation of the ISectionParser
 #===============================================================================
 DEFAULT_VALUE_FIELD_START_INDEX = 16
 DEFAULT_NAME_FIELD_START_INDEX = 3
+
 class AbstractSectionParser (ISectionParser):
     def __init__(self, section, valueStartIndex = DEFAULT_VALUE_FIELD_START_INDEX):
         self._varName = None
@@ -139,23 +104,26 @@ class AbstractSectionParser (ISectionParser):
         self._varValue = None
         self._section = section
         self._valueStartIdx = valueStartIndex
-        self._addVarToRoutine = None
-        self._postParsingRoutine = None
+        self.addVarToRoutine = None
+        self.postParsingRoutine = None
         self._suspiousLine = False
+        self._curRoutine = None
+
     def __resetVar__(self):
         self._varName = None
         self._varPrefix = None
         self._varValue = None
         self._suspiousLine = False
-    def __handleSuspiousCases__(self, Routine, CrossReference):
+
+    def __handleSuspiousCases__(self, routine, crossRef):
         if not self._suspiousLine:
             return
         self._varValue = self._varName[self._valueStartIdx - DEFAULT_NAME_FIELD_START_INDEX:]
         self._varName = self._varName[:self._valueStartIdx - DEFAULT_NAME_FIELD_START_INDEX]
-        if self._addVarToRoutine:
-            self._addVarToRoutine(Routine, CrossReference)
-        if self._postParsingRoutine:
-            self._postParsingRoutine(Routine, CrossReference)
+        if self.addVarToRoutine:
+            self.addVarToRoutine(routine, crossRef)
+        if self.postParsingRoutine:
+            self.postParsingRoutine(routine, crossRef)
 
     def __isNameValuePairLine__(self, line, pkgInfo=False):
         if (line[DEFAULT_NAME_FIELD_START_INDEX] == ' ' or
@@ -182,79 +150,118 @@ class AbstractSectionParser (ISectionParser):
         line = line[0:DEFAULT_NAME_FIELD_START_INDEX]
         return line != "   " and line != ">> "
 
-    def onSectionStart(self, line, section,crossRef):
-        assert section == self._section
+    def onSectionStart(self, curLine, sectionHeader, crossRef):
+        assert sectionHeader == self._section
         self.__resetVar__()
 
-    def onSectionEnd(self, line, section, Routine, CrossReference):
+    def onSectionEnd(self, line, section, routine, crossRef):
         assert section == self._section
-        self.__handleSuspiousCases__(Routine, CrossReference)
+        self.__handleSuspiousCases__(routine, crossRef)
         self.__resetVar__()
+
     def registerAddVarToRoutine(self, addVarToRoutine):
-        self._addVarToRoutine = addVarToRoutine
+        self.addVarToRoutine = addVarToRoutine
+
     def registerPostParsingRoutine(self, postParsing):
-        self._postParsingRoutine = postParsing
-    def parseLine(self, line, Routine, CrossReference):
+        self.postParsingRoutine = postParsing
+
+    def parseLine(self, line, routine, crossRef):
+        if not routine:
+            return
         if self.__ignoreLine__(line):
             return
-        if not Routine:
-            return
+
         # handle three cases:
         # 1. continuation of the previous info with value info
         # 2. Name too long.
         # 3. normal name/value pair
         if self.__isNameValuePairLine__(line):
-            if self._suspiousLine:
-                self.__handleSuspiousCases__(Routine, CrossReference)
-                self._suspiousLine = False
-            self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-            self._varValue = line[self._valueStartIdx:]
-            self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:self._valueStartIdx].strip()
-            if self._addVarToRoutine:
-                self._addVarToRoutine(Routine, CrossReference)
-            if self._postParsingRoutine:
-                self._postParsingRoutine(Routine, CrossReference)
-            return
+            self.__parseNameValuePairLine__(line, routine, crossRef)
+        elif self.__isValueOnlyLine__(line):
+            self.__parseValueOnlyLine(line, routine, crossRef)
+        elif self.__isLongNameLine__(line):
+            self.__parseLongNameLine__(line, routine, crossRef)
+        else:
+            logger.error("Could not handle this, Routine: %s, line: %s" % (routine, line))
 
-        if self.__isValueOnlyLine__(line):
+    def __parseNameValuePairLine__(self, line, routine, crossRef):
+        if self._suspiousLine:
+            self.__handleSuspiousCases__(routine, crossRef)
             self._suspiousLine = False
-            self._varValue = line[self._valueStartIdx:].strip()
-            if not self._varName:
-                logger.error("No varname is set, Routine: %s line: %s" % (Routine, line))
-                return
-            if self._addVarToRoutine:
-                self._addVarToRoutine(Routine, CrossReference)
-            if self._postParsingRoutine:
-                self._postParsingRoutine(Routine, CrossReference)
+        self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
+        self._varValue = line[self._valueStartIdx:]
+        self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:self._valueStartIdx].strip()
+        if self.addVarToRoutine:
+            self.addVarToRoutine(routine, crossRef)
+        if self.postParsingRoutine:
+            self.postParsingRoutine(routine, crossRef)
+
+    def __parseValueOnlyLine(self, line, routine, crossRef):
+        self._suspiousLine = False
+        self._varValue = line[self._valueStartIdx:].strip()
+        if not self._varName:
+            logger.error("No varname is set, Routine: %s line: %s" % (routine, line))
             return
+        if self.addVarToRoutine:
+            self.addVarToRoutine(routine, crossRef)
+        if self.postParsingRoutine:
+            self.postParsingRoutine(routine, crossRef)
 
-        if self.__isLongNameLine__(line):
-            ''' Check that Global information doesn't happen to touch the rest of the info
-              Global Variables  ( * Changed  ! Killed)
+    def __parseLongNameLine__(self, line, routine,crossRef):
+        ''' Check that Global information doesn't happen to touch the rest of the info
+          Global Variables  ( * Changed  ! Killed)
 
-                 ^AUTTHF("B"         ISDUE+13
+             ^AUTTHF("B"         ISDUE+13
 
-                 ^PXRMINDX(9000010.23ISDUE+14,ISDUE+16                                  <<<< What we are trying to capture
+             ^PXRMINDX(9000010.23ISDUE+14,ISDUE+16                                  <<<< What we are trying to capture
 
-                 ^TMP($J             LIST+6,LIST+10*,LIST+12,LIST+14,LIST+15*,LIST+16!
-            '''
-            match = LOCATION_INFO.search(line)
-            if match:
-              self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-              self._varValue = match.groups()[1]
-              self._varName = match.groups()[0].strip()
-              if self._addVarToRoutine:
-                  self._addVarToRoutine(Routine, CrossReference)
-              if self._postParsingRoutine:
-                  self._postParsingRoutine(Routine, CrossReference)
-              return
-            if self._suspiousLine:
-                self.__handleSuspiousCases__(Routine, CrossReference)
-            self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:].strip()
-            self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-            self._suspiousLine = True
-            return
-        logger.error("Could not handle this, Routine: %s, line: %s" % (Routine, line))
+             ^TMP($J             LIST+6,LIST+10*,LIST+12,LIST+14,LIST+15*,LIST+16!
+        '''
+        match = LOCATION_INFO.search(line)
+        if match:
+          self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
+          self._varValue = match.groups()[1]
+          self._varName = match.groups()[0].strip()
+          if self.addVarToRoutine:
+              self.addVarToRoutine(routine, crossRef)
+          if self.postParsingRoutine:
+              self.postParsingRoutine(routine, crossRef)
+          return
+
+        if self._suspiousLine:
+            self.__handleSuspiousCases__(routine, crossRef)
+        self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:].strip()
+        self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
+        self._suspiousLine = True
+
+
+    ###########################################################################
+
+    def checkCSVDeps(self, crossRef, optionText, keyVal):
+      if crossRef.inputTemplateDeps:
+        if (keyVal == "Input_Template") and (optionText in crossRef.inputTemplateDeps):
+          for entry in crossRef.inputTemplateDeps[optionText]:
+            foundGlobal = crossRef.getGlobalByFileNo(entry[3])
+            if foundGlobal:
+              self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
+                                          "",
+                                          "RJ"))
+      if crossRef.sortTemplateDeps:
+        if (keyVal == "Sort_Template") and (optionText in crossRef.sortTemplateDeps):
+          for entry in crossRef.sortTemplateDeps[optionText]:
+            foundGlobal = crossRef.getGlobalByFileNo(entry[3])
+            if foundGlobal:
+              self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
+                                          "",
+                                          "RJ"))
+      if crossRef.printTemplateDeps:
+        if (keyVal == "Print_Template") and (optionText in crossRef.printTemplateDeps):
+          for entry in crossRef.printTemplateDeps[optionText]:
+            foundGlobal = crossRef.getGlobalByFileNo(entry[3])
+            if foundGlobal:
+              self._curRoutine.addGlobalVariables(GlobalVariable(foundGlobal.getName(),
+                                          "",
+                                          "RJ"))
 #===============================================================================
 # Implementation of a section _sectionParser to parse the local variables part
 #===============================================================================
@@ -262,8 +269,8 @@ class LocalVarSectionParser (AbstractSectionParser):
     def __init__(self):
         AbstractSectionParser.__init__(self, IXindexLogFileParser.LOCAL_VARIABLE)
         self.registerAddVarToRoutine(self.__addVarToRoutine__)
-    def __addVarToRoutine__(self, Routine, CrossReference):
-        Routine.addLocalVariables(LocalVariable(self._varName,
+    def __addVarToRoutine__(self, routine, crossRef):
+        routine.addLocalVariables(LocalVariable(self._varName,
                                                 self._varPrefix,
                                                 self._varValue))
 #===============================================================================
@@ -271,37 +278,40 @@ class LocalVarSectionParser (AbstractSectionParser):
 #===============================================================================
 class GlobalVarSectionParser (AbstractSectionParser):
     def __init__(self):
-        GLOBAL_VAR_VALUE_FIELD_START_INDEX = 23
+        globalVarValueFieldStartIndex = 23
         AbstractSectionParser.__init__(self, IXindexLogFileParser.GLOBAL_VARIABLE,
-                                             GLOBAL_VAR_VALUE_FIELD_START_INDEX)
+                                       globalVarValueFieldStartIndex)
         self.registerAddVarToRoutine(self.__addVarToRoutine__)
         self.registerPostParsingRoutine(self.__postParsing__)
-    def __addVarToRoutine__(self, Routine, CrossReference):
-        globalVar = CrossReference.getGlobalByName(self._varName)
+
+    def __addVarToRoutine__(self, routine, crossRef):
+        globalVar = crossRef.getGlobalByName(self._varName)
         if not globalVar:
            # this is to fix a problem with the name convention of a top level global
            # like ICD9 can be referred as eith ICD9 or ICD9(
            altName = getAlternateGlobalName(self._varName)
-           globalVar = CrossReference.getGlobalByName(altName)
+           globalVar = crossRef.getGlobalByName(altName)
            if globalVar:
               self._varName = altName
-        Routine.addGlobalVariables(GlobalVariable(self._varName,
+        routine.addGlobalVariables(GlobalVariable(self._varName,
                                                   self._varPrefix,
                                                   self._varValue))
-    def __postParsing__(self, Routine, CrossReference):
-        globalVar = CrossReference.getGlobalByName(self._varName)
+
+    def __postParsing__(self, routine, crossRef):
+        globalVar = crossRef.getGlobalByName(self._varName)
         if not globalVar:
-            globalVar = CrossReference.addNonFileManGlobalByName(self._varName)
-        routineName = Routine.getName()
+            globalVar = crossRef.addNonFileManGlobalByName(self._varName)
+        routineName = routine.getName()
         # case to handle the platform dependent routines
-        if CrossReference.isPlatformDependentRoutineByName(routineName):
-            genericRoutine = CrossReference.getGenericPlatformDepRoutineByName(routineName)
+        if crossRef.isPlatformDependentRoutineByName(routineName):
+            genericRoutine = crossRef.getGenericPlatformDepRoutineByName(routineName)
             assert genericRoutine
             globalVar.addReferencedRoutine(genericRoutine)
             genericRoutine.addReferredGlobal(globalVar)
         else:
-            globalVar.addReferencedRoutine(Routine)
-        Routine.addReferredGlobal(globalVar)
+            globalVar.addReferencedRoutine(routine)
+        routine.addReferredGlobal(globalVar)
+
 #===============================================================================
 # Implementation of a section logFileParser to parse the Naked Globals part
 #===============================================================================
@@ -309,8 +319,9 @@ class NakedGlobalsSectionParser (AbstractSectionParser):
     def __init__(self):
         AbstractSectionParser.__init__(self, IXindexLogFileParser.NAKED_GLOBAL)
         self.registerAddVarToRoutine(self.__addVarToRoutine__)
-    def __addVarToRoutine__(self, Routine, CrossReference):
-        Routine.addNakedGlobals(NakedGlobal(self._varName,
+
+    def __addVarToRoutine__(self, routine, crossRef):
+        routine.addNakedGlobals(NakedGlobal(self._varName,
                                             self._varPrefix,
                                             self._varValue))
 #===============================================================================
@@ -320,8 +331,9 @@ class MarkedItemsSectionParser (AbstractSectionParser):
     def __init__(self):
         AbstractSectionParser.__init__(self, IXindexLogFileParser.MARKED_ITEMS)
         self.registerAddVarToRoutine(self.__addVarToRoutine__)
-    def __addVarToRoutine__(self, Routine, CrossReference):
-        Routine.addMarkedItems(MarkedItem(self._varName,
+
+    def __addVarToRoutine__(self, routine, crossRef):
+        routine.addMarkedItems(MarkedItem(self._varName,
                                           self._varPrefix,
                                           self._varValue))
 #===============================================================================
@@ -331,15 +343,16 @@ class LabelReferenceSectionParser (AbstractSectionParser):
     def __init__(self):
         AbstractSectionParser.__init__(self, IXindexLogFileParser.LABEL_REFERENCE)
         self.registerAddVarToRoutine(self.__addVarToRoutine__)
-    def __addVarToRoutine__(self, Routine, CrossReference):
-        Routine.addLabelReference(LabelReference(self._varName,
+
+    def __addVarToRoutine__(self, routine, crossRef):
+        routine.addLabelReference(LabelReference(self._varName,
                                                 self._varPrefix,
                                                 self._varValue))
 #===============================================================================
 # Implementation of a section logFileParser to parse the index of the non-routine
 # section of an XINDEX ouput
 #===============================================================================
-class PackageInfoSectionParser (AbstractSectionParser):
+class PackageInfoSectionParser(AbstractSectionParser):
     def __init__(self):
         AbstractSectionParser.__init__(self, IXindexLogFileParser.PACKAGE_COMPONENT_SECTION)
         self._curPackage = None
@@ -351,45 +364,89 @@ class PackageInfoSectionParser (AbstractSectionParser):
                   routineName = ROUTINE_START.search(curLine).group('name')
                   match = VALID_OBJECT.search(routineName)
                   if match:
-                    if match.group("name") in [PackageComponentInfoDict[x]["_curKey"] for x in PackageComponentInfoDict]:
+                    if match.group("name") in [PACKAGE_COMPONENT_INFO_DICT[x]["_curKey"] for x in PACKAGE_COMPONENT_INFO_DICT]:
                       section = IXindexLogFileParser.PACKAGE_COMPONENT_SECTION
                 return section
         return None
 
-    def onSectionStart(self, curLine, sectionHeader, CrossReference):
+    def onSectionStart(self, curLine, sectionHeader, crossRef):
       routineName = ROUTINE_START.search(curLine).group('name')[1:]
       self._returnJSON = {}
-      if routineName in PackageComponentInfoDict:
-        self._fileNumber = PackageComponentInfoDict[routineName]['_fileNumber']
-        self._nameLocation = PackageComponentInfoDict[routineName]['_nameLocation']
-        self._headerIndex = PackageComponentInfoDict[routineName]['_headerIndex']
-        self._curKey = PackageComponentInfoDict[routineName]['_curKey']
+      if routineName in PACKAGE_COMPONENT_INFO_DICT:
+        self._fileNumber = PACKAGE_COMPONENT_INFO_DICT[routineName]['_fileNumber']
+        self._nameLocation = PACKAGE_COMPONENT_INFO_DICT[routineName]['_nameLocation']
+        self._headerIndex = PACKAGE_COMPONENT_INFO_DICT[routineName]['_headerIndex']
+        self._curKey = PACKAGE_COMPONENT_INFO_DICT[routineName]['_curKey']
 
-      sourcePath = os.path.join(CrossReference.outDir,self._fileNumber.replace(".","_")+".json")
-      if CrossReference.outDir and os.path.isfile(sourcePath):
+      sourcePath = os.path.join(crossRef.outDir,self._fileNumber.replace(".","_")+".json")
+      if crossRef.outDir and os.path.isfile(sourcePath):
         with open(sourcePath,"r") as file:
           self._returnJSON = json.load(file)
       self._curRoutine= PackageComponent("object",0,self._curPackage)
+      # TODO: Other places in the code assume these exists...
+      # Should set to None in constructor and check before using?
       self._curGetAllFunction = self._curPackage.getAllPackageComponents
       self._curGetFunction = self._curPackage.getPackageComponent
       self._curAddFunction = self._curPackage.addPackageComponent
       self._curType = PackageComponent
 
-    def parseLine(self, line, Routine, CrossReference):
+    def parseLine(self, line, routine, crossRef):
       sectionHeader = self.__isSectionHeader__(line)
       if sectionHeader:
-        self._localSection = sectionHeader
-        self._localHandler = sectHandleDict.get(sectionHeader)
+          self._localSection = sectionHeader
+          # TODO: Other places in the code assume this exists...
+          # Should set to None in constructor and check before using?
+          self._localHandler = SECT_HANDLE_DICT.get(sectionHeader)
       if self.__ignoreLine__(line):
           return
-      result = self.__isNameValuePairLine__(line,pkgInfo=True)
-      if result:
-          spaceVal =self._valueStartIdx-1
-          if line[spaceVal] != " ":
-            spaceVal = line.find(" ",spaceVal)
+
+      if self.__isNameValuePairLine__(line, pkgInfo=True):
+          self.__parseNameValuePairLine__(line, routine, crossRef)
+      elif self.__isValueOnlyLine__(line):
+          self.__parseValueOnlyLine(line, routine, crossRef)
+      elif self.__isLongNameLine__(line):
+          self.__parseLongNameLine__(line, routine, crossRef)
+      else:
+          logger.error("Could not handle this, Routine: %s, line: %s" % (routine, line))
+
+    def __parseNameValuePairLine__(self, line, routine, crossRef):
+        spaceVal =self._valueStartIdx-1
+        if line[spaceVal] != " ":
+          spaceVal = line.find(" ",spaceVal)
+        self._localHandler._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
+        self._varNames = re.split("[,]",line[spaceVal:])
+        self._localHandler._varName = line[DEFAULT_NAME_FIELD_START_INDEX:spaceVal].strip()
+        if self._localHandler._varName == "NONE":
+          return
+        for index, location in enumerate(self._varNames):
+          if location != ' ':
+            match = OPTION.search(location)
+            optionNumber = match.group('optionIEN')
+            self._localHandler._varValue = match.group('optionLocation') + match.group('_varValue')
+            optionText = optionNumber
+            self.componentTypeStr = ''
+            if optionText in self._returnJSON:
+              optionText = self._returnJSON[optionNumber][self._nameLocation][self._headerIndex:]
+              if "4" in self._returnJSON[optionNumber]:
+                self.componentTypeStr = self._returnJSON[optionNumber]['4'][6:]
+            if optionNumber not in self._curGetAllFunction(self._curKey):
+              self._curAddFunction(self._curKey,
+                                   self._curType(optionText, optionNumber, self._curPackage))
+              self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
+              self.checkCSVDeps(crossRef, optionText,self._curKey)
+            self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
+            if  self.componentTypeStr:
+              self._curRoutine.componentType =  self.componentTypeStr
+            if self._localHandler.addVarToRoutine:
+                self._localHandler.addVarToRoutine(self._curRoutine, crossRef)
+            if self._localHandler.postParsingRoutine:
+                self._localHandler.postParsingRoutine(self._curRoutine, crossRef)
+
+    def __parseValueOnlyLine__(self, line, routine, crossRef):
+        self._suspiousLine = False
+        if "+" in line:
           self._localHandler._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-          self._varNames = re.split("[,]",line[spaceVal:])
-          self._localHandler._varName = line[DEFAULT_NAME_FIELD_START_INDEX:spaceVal].strip()
+          self._varNames = re.split("[,]",line[self._valueStartIdx:])
           if self._localHandler._varName == "NONE":
             return
           for index, location in enumerate(self._varNames):
@@ -398,79 +455,48 @@ class PackageInfoSectionParser (AbstractSectionParser):
               optionNumber = match.group('optionIEN')
               self._localHandler._varValue = match.group('optionLocation') + match.group('_varValue')
               optionText = optionNumber
-              self.componentTypeStr = ''
               if optionText in self._returnJSON:
-                optionText = self._returnJSON[optionNumber][self._nameLocation][self._headerIndex:]
-                if "4" in self._returnJSON[optionNumber]:
-                  self.componentTypeStr = self._returnJSON[optionNumber]['4'][6:]
+                optionText = self._returnJSON[optionText][self._nameLocation][self._headerIndex:]
               if optionNumber not in self._curGetAllFunction(self._curKey):
                 self._curAddFunction(self._curKey, self._curType(optionText, optionNumber, self._curPackage))
                 self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
-                checkCSVDeps(self, CrossReference, optionText,self._curKey)
+                self.checkCSVDeps(crossRef, optionText, self._curKey)
               self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
-              if  self.componentTypeStr:
-                self._curRoutine.componentType =  self.componentTypeStr
-              if self._localHandler._addVarToRoutine:
-                  self._localHandler._addVarToRoutine(self._curRoutine, CrossReference)
-              if self._localHandler._postParsingRoutine:
-                  self._localHandler._postParsingRoutine(self._curRoutine, CrossReference)
-          return
-      result = self.__isValueOnlyLine__(line)
-      if result:
-          self._suspiousLine = False
-          if "+" in line:
-            self._localHandler._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-            self._varNames = re.split("[,]",line[self._valueStartIdx:])
-            if self._localHandler._varName == "NONE":
-              return
-            for index, location in enumerate(self._varNames):
-              if location != ' ':
-                match = OPTION.search(location)
-                optionNumber = match.group('optionIEN')
-                self._localHandler._varValue = match.group('optionLocation') + match.group('_varValue')
-                optionText = optionNumber
-                if optionText in self._returnJSON:
-                  optionText = self._returnJSON[optionText][self._nameLocation][self._headerIndex:]
-                if optionNumber not in self._curGetAllFunction(self._curKey):
-                  self._curAddFunction(self._curKey, self._curType(optionText, optionNumber, self._curPackage))
-                  self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
-                  checkCSVDeps(self, CrossReference, optionText,self._curKey)
-                self._curRoutine = self._curGetFunction(self._curKey, optionNumber)
-                if self._localHandler._addVarToRoutine:
-                    self._localHandler._addVarToRoutine(self._curRoutine, CrossReference)
-                if self._localHandler._postParsingRoutine:
-                    self._localHandler._postParsingRoutine(self._curRoutine, CrossReference)
-            return
-          else:
-            self._localHandler._varName = line[DEFAULT_NAME_FIELD_START_INDEX:self._valueStartIdx].strip()
-      result = self.__isLongNameLine__(line)
-      if result:
-          ''' Check that Global information doesn't happen to touch the rest of the info
-            Global Variables  ( * Changed  ! Killed)
+              if self._localHandler.addVarToRoutine:
+                  self._localHandler.addVarToRoutine(self._curRoutine, crossRef)
+              if self._localHandler.postParsingRoutine:
+                  self._localHandler.postParsingRoutine(self._curRoutine, crossRef)
+        else:
+          self._localHandler._varName = line[DEFAULT_NAME_FIELD_START_INDEX:self._valueStartIdx].strip()
 
-               ^AUTTHF("B"         ISDUE+13
+    def __parseLongNameLine__(self, line, routine, crossRef):
+        ''' Check that Global information doesn't happen to touch the rest of the info
+          Global Variables  ( * Changed  ! Killed)
 
-               ^PXRMINDX(9000010.23ISDUE+14,ISDUE+16                                  <<<< What we are trying to capture
+             ^AUTTHF("B"         ISDUE+13
 
-               ^TMP($J             LIST+6,LIST+10*,LIST+12,LIST+14,LIST+15*,LIST+16!
-          '''
-          match = GLOBAL_NAME_LOCATION.search(line)
-          if match:
-            self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-            self._varValue = match.groups()[1]
-            self._varName = match.groups()[0].strip()
-            if self._localHandler._addVarToRoutine:
-                self._localHandler._addVarToRoutine(self._curRoutine, CrossReference)
-            if self._localHandler._postParsingRoutine:
-                self._localHandler._postParsingRoutine(self._curRoutine, CrossReference)
-            return
-          if self._suspiousLine:
-              self.__handleSuspiousCases__(Routine, CrossReference)
-          self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:].strip()
+            ^PXRMINDX(9000010.23ISDUE+14,ISDUE+16                                  <<<< What we are trying to capture
+
+             ^TMP($J             LIST+6,LIST+10*,LIST+12,LIST+14,LIST+15*,LIST+16!
+        '''
+        match = GLOBAL_NAME_LOCATION.search(line)
+        if match:
           self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
-          self._suspiousLine = True
+          self._varValue = match.groups()[1]
+          self._varName = match.groups()[0].strip()
+          if self._localHandler.addVarToRoutine:
+              self._localHandler.addVarToRoutine(self._curRoutine, crossRef)
+          if self._localHandler.postParsingRoutine:
+              self._localHandler.postParsingRoutine(self._curRoutine, crossRef)
           return
-      logger.error("Could not handle this, Routine: %s, line: %s" % (Routine, line))
+
+        if self._suspiousLine:
+            self.__handleSuspiousCases__(routine, crossRef)
+        self._varName = line[DEFAULT_NAME_FIELD_START_INDEX:].strip()
+        self._varPrefix = line[0:DEFAULT_NAME_FIELD_START_INDEX]
+        self._suspiousLine = True
+
+
 #===============================================================================
 # Implementation of a section logFileParser to parse the Called Routine parts
 #===============================================================================
@@ -481,37 +507,37 @@ class ExternalReferenceSectionParser (AbstractSectionParser):
                                              EXTERNAL_REFERENCE_VALUE_FIELD_START_INDEX)
         self.registerPostParsingRoutine(self.__postParsing__)
 
-    def __postParsing__(self, Routine, CrossReference):
+    def __postParsing__(self, routine, crossRef):
         routineDetail = ROUTINE_TAG.search(self._varName.strip())
         if routineDetail:
             routineName = routineDetail.group('name')
             if not VALID_ROUTINE_NAME.search(routineName):
                 logger.warning("invalid Routine Name: %s in routine:%s, package: %s" %
-                             (routineName, Routine, Routine.getPackage()))
+                             (routineName, routine, routine.getPackage()))
                 return
-            if (routineName.startswith("%")):
-               CrossReference.addPercentRoutine(routineName)
+            if routineName.startswith("%"):
+               crossRef.addPercentRoutine(routineName)
                # ignore mumps routine for now
-               if CrossReference.isMumpsRoutine(routineName):
+               if crossRef.isMumpsRoutine(routineName):
                    return
 #                   routineName=routineName[1:]
-            if CrossReference.routineNeedRename(routineName):
-                routineName = CrossReference.getRenamedRoutineName(routineName)
+            if crossRef.routineNeedRename(routineName):
+                routineName = crossRef.getRenamedRoutineName(routineName)
             tag = ""
             if routineDetail.group('external'):
                 tag += routineDetail.group('external')
             if routineDetail.group('tag'):
                 tag += routineDetail.group('tag')
-            if not CrossReference.hasRoutine(routineName):
+            if not crossRef.hasRoutine(routineName):
                 # automatically categorize the routine by the namespace
                 # if could not find one, assign to Uncategorized
                 defaultPackageName = "Uncategorized"
-                (namespace, package) = CrossReference.categorizeRoutineByNamespace(routineName)
+                (namespace, package) = crossRef.categorizeRoutineByNamespace(routineName)
                 if namespace and package:
                     defaultPackageName = package.getName()
-                CrossReference.addRoutineToPackageByName(routineName, defaultPackageName, False)
-            routine = CrossReference.getRoutineByName(routineName)
-            Routine.addCalledRoutines(routine, tag, self._varValue)
+                crossRef.addRoutineToPackageByName(routineName, defaultPackageName, False)
+            routine = crossRef.getRoutineByName(routineName)
+            routine.addCalledRoutines(routine, tag, self._varValue)
 
 #===============================================================================
 # Implementation of a Structured Routine Print section
@@ -519,12 +545,14 @@ class ExternalReferenceSectionParser (AbstractSectionParser):
 class RoutinePrintSectionParser (AbstractSectionParser):
   def __init__(self):
     AbstractSectionParser.__init__(self, IXindexLogFileParser.ROUTINE_PRINT)
-  def onSectionStart(self, curLine, sectionHeader,crossRef):
+
+  def onSectionStart(self, curLine, sectionHeader, crossRef):
     global structuredSource
     structuredSource=[]
-  def parseLine(self, line, Routine, CrossReference):
+
+  def parseLine(self, line, routine, crossRef):
     global structuredSource
-    structuredSource.append(line);
+    structuredSource.append(line)
 
 #===============================================================================
 # Implementation of a Package Object listing parser section
@@ -533,21 +561,22 @@ class PackageObjectListingSectionParser (AbstractSectionParser):
   def __init__(self):
     AbstractSectionParser.__init__(self, IXindexLogFileParser.PACKAGE_COMPONENT_LIST_SECTION)
 
-  def onSectionStart(self, curLine, sectionHeader,crossRef):
+  def onSectionStart(self, curLine, sectionHeader, crossRef):
     matchKey = KEY_OBJECT.match(curLine.strip())
     if matchKey:
-      self.curKeyType = PackageComponentInfoDict[matchKey.group("name")]["_curKey"]
+      self.curKeyType = PACKAGE_COMPONENT_INFO_DICT[matchKey.group("name")]["_curKey"]
 
-  def parseLine(self, line, Routine, CrossReference):
+  def parseLine(self, line, routine, crossRef):
     line = line.strip()
     matchKey = KEY_OBJECT.match(line)
     matchObjNo = COMPONENT_OBJECT.match(line)
     if matchKey:
-      self.curKeyType = PackageComponentInfoDict[matchKey.group("name")]["_curKey"]
+      self.curKeyType = PACKAGE_COMPONENT_INFO_DICT[matchKey.group("name")]["_curKey"]
     elif matchObjNo:
+      # TODO: self._curPackage is not defined
       self._curRoutine = PackageComponent(matchObjNo.groups()[1], matchObjNo.groups()[0], self._curPackage)
       optionText = matchObjNo.groups()[1]
-      checkCSVDeps(self, CrossReference, optionText,self.curKeyType)
+      self.checkCSVDeps(crossRef, optionText,self.curKeyType)
       self._curPackage.addPackageComponent(self.curKeyType,self._curRoutine)
 
 #===============================================================================
@@ -590,7 +619,7 @@ class IXindexLogFileParser:
         '''
         wether this is the end of the section, returns a tuple (bool, section enum)
         '''
-    def registerSectionHandle(self, section, AbstractSectionParser):
+    def registerSectionHandle(self, section, abstractSectionParser):
         '''
         register a handle callback for each of the section, should be called before parsing
         '''
@@ -598,8 +627,8 @@ class IXindexLogFileParser:
 # Class defines the parsing workflow for XINDEX log file
 #===============================================================================
 class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
-    def __init__(self, CrossReference):
-        self._crossRef = CrossReference
+    def __init__(self, crossRef):
+        self._crossRef = crossRef
         self._curSection = None
         self._curHandler = None
         self._curPackage = None
@@ -622,7 +651,7 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
         self._sectionHeaderRegex[ROUTINE_DETAIL_START] = IXindexLogFileParser.ROUTINE_PRINT
         self._sectionHeaderRegex[COMPONENT_LIST_START] = IXindexLogFileParser.PACKAGE_COMPONENT_LIST_SECTION
         global SECTION_HEADER_REGEX
-        SECTION_HEADER_REGEX =  self._sectionHeaderRegex
+        SECTION_HEADER_REGEX = self._sectionHeaderRegex
 
     def __initDefaultSectionHandler__(self):
         self._sectHandleDict[IXindexLogFileParser.ROUTINE] = self
@@ -635,12 +664,12 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
         self._sectHandleDict[IXindexLogFileParser.EXTERNEL_REFERENCE] = ExternalReferenceSectionParser()
         self._sectHandleDict[IXindexLogFileParser.ROUTINE_PRINT] = RoutinePrintSectionParser()
         self._sectHandleDict[IXindexLogFileParser.PACKAGE_COMPONENT_LIST_SECTION] = PackageObjectListingSectionParser()
-        global sectHandleDict
-        sectHandleDict =  self._sectHandleDict
+        global SECT_HANDLE_DICT
+        SECT_HANDLE_DICT =  self._sectHandleDict
 
     # implementation of section parser interface for Routine Section
-    def onSectionStart(self, line, section,crossRef):
-        if section != IXindexLogFileParser.ROUTINE:
+    def onSectionStart(self, line, sectionHeader, crossRef):
+        if sectionHeader != IXindexLogFileParser.ROUTINE:
             logger.error("Invalid section Header --> %s", line)
             return False
         routineName = ROUTINE_START.search(line).group('name')
@@ -670,14 +699,15 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
             if self._curRoutine:
               self._curRoutine.setPackage(self._curPackage)
 
-    def onSectionEnd(self, line, section, Routine, CrossReference):
+    def onSectionEnd(self, line, section, routine, crossRef):
         if section != IXindexLogFileParser.ROUTINE:
             logger.error("Invalid section Header")
             return False
         self._curRoutine = None
         return True
-    def registerSectionHandle(self, section, AbstractSectionParser):
-        self._sectHandleDict[section] = AbstractSectionParser
+
+    def registerSectionHandle(self, section, abstractSectionParser):
+        self._sectHandleDict[section] = abstractSectionParser
 
     def parseXindexLogFile(self, logFileName):
         if not os.path.exists(logFileName):
@@ -705,7 +735,7 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
                 if self._curHandler:
                     self._curHandler.onSectionEnd(curLine, self._curSection,
                                                   self._curRoutine, self._crossRef)
-                assert(self._curSection == self._sectionStack.pop())
+                assert self._curSection == self._sectionStack.pop()
                 if self._sectionStack:
                     self._curSection = self._sectionStack[-1]
                     self._curHandler = self._sectHandleDict[self._curSection]
@@ -725,7 +755,7 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
                 if section == IXindexLogFileParser.ROUTINE:
                   routineName = ROUTINE_START.search(curLine).group('name')
                   match = VALID_OBJECT.search(routineName)
-                  if match and match.group("name") in PackageComponentInfoDict:
+                  if match and match.group("name") in PACKAGE_COMPONENT_INFO_DICT:
                     section = IXindexLogFileParser.PACKAGE_COMPONENT_SECTION
                 return section
         return None
@@ -757,6 +787,7 @@ class CallerGraphLogFileParser(object):
         return self._crossRef.getAllPackages()
     def getAllGlobals(self):
         return self._crossRef.getAllGlobals()
+
     def outputPackageCSVFile(self, outputFile):
         output = csv.writer(open(outputFile, 'w'), lineterminator='\n')
         allPackages = self._crossRef.getAllPackages()
@@ -766,12 +797,12 @@ class CallerGraphLogFileParser(object):
             package = allPackages[packageName]
             namespaceList = package.getNamespaces()
             globalnamespaceList = package.getGlobalNamespace()
-            globals = package.getAllGlobals()
-            globalList = sorted(globals.values(),
-                              key=lambda item: float(item.getFileNo()))
+            allGlobals = package.getAllGlobals()
+            globalList = sorted(allGlobals.values(),
+                                key=lambda item: float(item.getFileNo()))
             maxRows = max(len(namespaceList),
-                        len(globalnamespaceList),
-                        len(globals))
+                          len(globalnamespaceList),
+                          len(allGlobals))
             if maxRows == 0:
                 continue
             for index in range(maxRows):
@@ -783,7 +814,7 @@ class CallerGraphLogFileParser(object):
                     globalNamespace = globalnamespaceList[index]
                 else:
                     globalNamespace = ""
-                if len(globals) > index:
+                if len(allGlobals) > index:
                     globalFileNo = globalList[index].getFileNo()
                     globalDes = globalList[index].getFileManName()
                 else:

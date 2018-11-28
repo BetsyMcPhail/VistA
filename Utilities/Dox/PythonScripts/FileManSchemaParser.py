@@ -13,16 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #---------------------------------------------------------------------------
-import os
-import sys
-import re
-from datetime import datetime
 
-from CrossReference import FileManFile, FileManFieldFactory
-from CrossReference import FileManField, Global
-from ZWRGlobalParser import getKeys
-from ZWRGlobalParser import readGlobalNodeFromZWRFileV2
+import os
+import re
+import sys
+
+from CrossReference import FileManField, FileManFieldFactory, FileManFile
+from CrossReference import Global
 from LogManager import logger
+from ZWRGlobalParser import getKeys, readGlobalNodeFromZWRFileV2
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.normpath(os.path.join(FILE_DIR, "../../../Scripts"))
@@ -186,14 +185,6 @@ class FileManSchemaParser(object):
       self._updateFileDepSet(depFile, self._fileDep[depFile], exclude)
       deps.update(self._fileDep[depFile])
 
-  def _updateFileDep(self):
-    exclude = set()
-    for file in self._fileDep.iterkeys():
-      if file in exclude:
-        continue
-      exclude.add(file)
-      self._updateFileDepSet(file, deps, exclude)
-
   def _generateNoPointerToFileList(self):
     """
       generate list of files that does not have any pointer
@@ -214,10 +205,6 @@ class FileManSchemaParser(object):
   def _updateFileDepByFile(self, file, exclude):
     exclude.add(file)
     return self._updateFileDepSet(file, self._fileDep[file], exclude)
-
-  def _topologicSort(self):
-    from PatchOrderGenerator import topologicSort
-    result = topologicSort(self._fileDep, '2')
 
   def _generateSCCSet(self):
     """

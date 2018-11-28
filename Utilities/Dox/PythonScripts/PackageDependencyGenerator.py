@@ -16,10 +16,9 @@
 
 import argparse
 import json
-from CrossReferenceBuilder import createCrossReferenceLogArgumentParser
-from CrossReferenceBuilder import CrossReferenceBuilder
-from LogManager import initLogging, logger
 
+import CrossReferenceBuilder
+from LogManager import initLogging, logger
 
 def outputAllPackageDependency(crossRef, outputFile):
     dependents = {}
@@ -80,7 +79,7 @@ def outputAllPackageDependency(crossRef, outputFile):
 
 
 def main():
-    crossRefParse = createCrossReferenceLogArgumentParser()
+    crossRefParse = CrossReferenceBuilder.createCrossReferenceLogArgumentParser()
     parser = argparse.ArgumentParser(
           description='VistA Cross-Reference Builder',
           parents=[crossRefParse])
@@ -91,8 +90,7 @@ def main():
     initLogging(result.logFileDir, "GeneratePackageDep.log")
     logger.debug(result)
 
-    crossRefBlder = CrossReferenceBuilder()
-    crossRef = crossRefBlder.buildCrossReferenceWithArgs(result)
+    crossRef = CrossReferenceBuilder.buildCrossReferenceWithArgs(result)
     crossRef.generateAllPackageDependencies()
     outputAllPackageDependency(crossRef, result.pkgDepJson)
 

@@ -14,34 +14,26 @@
 # limitations under the License.
 #------------------------------------------------------------------------------
 
-import os
-import sys
-import re
-from datetime import datetime
-import glob
 import cgi
-import urllib
-import re
 import json
+import os
+import re
+import sys
+import urllib
 
-from ZWRGlobalParser import getKeys
 from json import JSONEncoder
+
 from CrossReference import FileManField
-from ZWRGlobalParser import readGlobalNodeFromZWRFileV2
-from UtilityFunctions import getRoutineHtmlFileName
-from UtilityFunctions import getPackageHtmlFileName, normalizePackageName
-from FileManGlobalDataParser import FileManDataEntry, FileManDataField
-from FileManGlobalDataParser import FileManFileData
-from DataTableHtml import data_table_list_init_setup
-from DataTableHtml import data_table_large_list_init_setup
-from DataTableHtml import outputDataTableHeader
 from DataTableHtml import outputCustomDataTableHeaderRows
-from DataTableHtml import outputDataTableFooter
-from DataTableHtml import writeTableListInfo, outputDataListTableHeader
-from DataTableHtml import outputLargeDataListTableHeader
-from DataTableHtml import outputDataRecordTableHeader
-from DataTableHtml import outputFileEntryTableList, safeElementId
+from DataTableHtml import outputDataListTableHeader, outputDataRecordTableHeader
+from DataTableHtml import outputDataTableHeader, outputDataTableFooter
+from DataTableHtml import outputFileEntryTableList, outputLargeDataListTableHeader
+from DataTableHtml import writeTableListInfo
+from FileManGlobalDataParser import FileManDataEntry, FileManDataField, FileManFileData
 from LogManager import logger
+from UtilityFunctions import getPackageHtmlFileName, getRoutineHtmlFileName
+from UtilityFunctions import normalizePackageName
+from ZWRGlobalParser import getKeys, readGlobalNodeFromZWRFileV2
 
 DOX_URL = None
 VIV_URL = None
@@ -273,7 +265,6 @@ def getMumpsRoutineHtmlLinks(inputString, crosRef=None):
   """
   output = ""
   startpos = 0
-  endpos = 0
   for routine, tag, start in getMumpsRoutine(inputString):
     if routine:
       output += (inputString[startpos:start] +
@@ -543,7 +534,6 @@ class FileManDataToHtml(object):
     """ find the top level menu, menu without any parent """
     allChildSet = reduce(set.union, menuDepDict.itervalues())
     rootSet = set(allMenuList) - allChildSet
-    leafSet = allChildSet - set(allMenuList)
 
     """ generate the json file based on root menu """
     for item in rootSet:
@@ -837,7 +827,6 @@ class FileManDataToHtml(object):
       elif (fieldType == FileManField.FIELD_TYPE_FILE_POINTER or
             fieldType == FileManField.FIELD_TYPE_VARIABLE_FILE_POINTER) :
         if value:
-          origVal = value
           value, tmp = convertFilePointerToHtml(value)
       elif fieldType == FileManField.FIELD_TYPE_WORD_PROCESSING:
         value = "\n".join(value)

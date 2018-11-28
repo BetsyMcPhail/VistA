@@ -14,20 +14,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#---------------------------------------------------------------------------
 
 import argparse
 import os
 import subprocess
 
+import CrossReferenceBuilder
 from LogManager import logger, initLogging
 
-from CrossReferenceBuilder import CrossReferenceBuilder
-from CrossReferenceBuilder import createCrossReferenceLogArgumentParser
-from CrossReference import PlatformDependentGenericRoutine
+from UtilityFunctions import getPackageDependencyHtmlFile
+from UtilityFunctions import getPackageGraphEdgePropsByMetrics
+from UtilityFunctions import getPackageHtmlFileName, getPackageObjHtmlFileName
+from UtilityFunctions import parseICRJson, mergeAndSortDependencyListByPackage
+from UtilityFunctions import normalizePackageName, readIntoDictionary
 
-from UtilityFunctions import *
-
-from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 
 # Do not generate the graph if have more than 30 nodes
@@ -173,8 +174,8 @@ class GraphGenerator:
         # Make the Pool of workers
         pool = ThreadPool(4)
         # Create graphs in their own threads
-        # and return the results
-        results = pool.map(self.generateRoutineDependencyGraph, allRoutines)
+        # TODO: DO something with results?
+        pool.map(self.generateRoutineDependencyGraph, allRoutines)
         # close the pool and wait for the work to finish
         pool.close()
         pool.join()
@@ -281,11 +282,11 @@ def run(args):
   parsedICRJSON = parseICRJson(icrJsonFile)
   logger.info ("Building cross reference....")
   doxDir = os.path.join(args.patchRepositDir, 'Utilities/Dox')
-  crossRef = CrossReferenceBuilder().buildCrossReferenceWithArgs(args,
-                                                                 icrJson=parsedICRJSON,
-                                                                 inputTemplateDeps=readIntoDictionary(args.inputTemplateDep),
-                                                                 sortTemplateDeps=readIntoDictionary(args.sortTemplateDep),
-                                                                 printTemplateDeps=readIntoDictionary(args.printTemplateDep)
+  crossRef = CrossReferenceBuilder.buildCrossReferenceWithArgs(args,
+                                                               icrJson=parsedICRJSON,
+                                                               inputTemplateDeps=readIntoDictionary(args.inputTemplateDep),
+                                                               sortTemplateDeps=readIntoDictionary(args.sortTemplateDep),
+                                                               printTemplateDeps=readIntoDictionary(args.printTemplateDep)
                                                                  )
   logger.info ("Starting generating graphs....")
   graphGenerator = GraphGenerator(crossRef,
@@ -298,7 +299,7 @@ def run(args):
   logger.info ("End of generating graphs")
 
 if __name__ == '__main__':
-    crossRefArgParse = createCrossReferenceLogArgumentParser()
+    crossRefArgParse = CrossReferenceBuilder.createCrossReferenceLogArgumentParser()
     parser = argparse.ArgumentParser(
         description='VistA Visual Cross-Reference Graph Generator',
         parents=[crossRefArgParse])

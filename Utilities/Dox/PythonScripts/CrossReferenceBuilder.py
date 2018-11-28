@@ -43,44 +43,24 @@ def createCrossReferenceLogArgumentParser():
                         help='Logfile directory')
     return parser
 
-class CrossReferenceBuilder(object):
-    def __init__(self):
-        pass
+def buildCrossReferenceWithArgs(arguments, icrJson=None, inputTemplateDeps=None,
+                                sortTemplateDeps=None, printTemplateDeps=None):
+    xindexLogDir = arguments.xindexLogDir
+    MRepositDir = arguments.MRepositDir
+    patchRepositDir = arguments.patchRepositDir
+    fileSchemaDir = arguments.fileSchemaDir
+    filemanDbJson = arguments.filemanDbJson,
+    outdir = arguments.outDir
 
-    def buildCrossReferenceWithArgs(self, arguments, icrJson=None,
-                                    inputTemplateDeps=None,
-                                    sortTemplateDeps=None,
-                                    printTemplateDeps=None):
-        return self.buildCrossReference(arguments.xindexLogDir,
-                                        arguments.MRepositDir,
-                                        arguments.patchRepositDir,
-                                        arguments.fileSchemaDir,
-                                        arguments.filemanDbJson,
-                                        icrJson,
-                                        arguments.outDir,
-                                        inputTemplateDeps=inputTemplateDeps,
-                                        sortTemplateDeps=sortTemplateDeps,
-                                        printTemplateDeps=printTemplateDeps)
+    crossRef = parseCrossReferenceGeneratorArgs(MRepositDir, patchRepositDir)
+    crossRef.outDir = outdir
+    crossRef.inputTemplateDeps = inputTemplateDeps
+    crossRef.sortTemplateDeps = sortTemplateDeps
+    crossRef.printTemplateDeps = printTemplateDeps
 
-    def buildCrossReference(self, xindexLogDir, MRepositDir,
-                            patchRepositDir, fileSchemaDir,
-                            filemanDbJson, icrJson,
-                            outdir, inputTemplateDeps,
-                            sortTemplateDeps, printTemplateDeps):
+    crossRef = parseDataDictionaryLogFile(crossRef, fileSchemaDir).getCrossReference()
+    crossRef = parseAllCallGraphLog(xindexLogDir, crossRef, icrJson).getCrossReference()
+    crossRef = parseFileManDBJSONFile(crossRef, filemanDbJson).getCrossReference()
+    crossRef.generateAllPackageDependencies()
 
-        crossRef = parseCrossReferenceGeneratorArgs(MRepositDir,
-                                                    patchRepositDir)
-        crossRef.outDir = outdir
-        crossRef._inputTemplateDeps = inputTemplateDeps
-        crossRef._sortTemplateDeps = sortTemplateDeps
-        crossRef._printTemplateDeps = printTemplateDeps
-
-        crossRef = parseDataDictionaryLogFile(crossRef, fileSchemaDir).getCrossReference()
-
-        crossRef = parseAllCallGraphLog(xindexLogDir, crossRef, icrJson).getCrossReference()
-
-
-        crossRef = parseFileManDBJSONFile(crossRef, filemanDbJson).getCrossReference()
-
-        crossRef.generateAllPackageDependencies()
-        return crossRef
+    return crossRef

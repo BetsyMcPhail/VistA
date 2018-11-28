@@ -18,29 +18,11 @@
 """
 
 from string import Template
-"""
-  html header using JQuery Table Sorter Plugin
-  http://tablesorter.com/docs/
-"""
 
-table_sorter_header="""
-<script type="text/javascript" src="https://code.jquery.com/jquery-1.11.0.min.js"></script>
-<script type="text/javascript" src="https://tablesorter.com/__jquery.tablesorter.js"></script>
-<script type="text/javascript" id="js">
-  $(document).ready(function() {
-  // call the tablesorter plugin
-  $("#rpctable").tablesorter({
-    // sort on the first column and third column, order asc
-    sortList: [[0,0],[2,0]]
-  });
-}); </script>
-"""
 
-"""
-  html header using JQuery DataTable Plugin
-  https://datatables.net/
-"""
-data_table_reference = """
+# html header using JQuery DataTable Plugin
+#  https://datatables.net/
+DATA_TABLE_REFERENCE = """
 <link rel="stylesheet" type="text/css" href="../../css/vivian.css"/>
 <link rel="stylesheet" type="text/css" href="../../datatable/css/jquery.dataTables.css"/>
 <link rel="stylesheet" type="text/css" href="../../datatable/css/buttons.dataTables.css"/>
@@ -68,7 +50,7 @@ data_table_reference = """
 </script>
 """
 
-downloadButtons = """
+DOWNLOAD_BUTTONS = """
           {
               extend: 'csv',
               title: '${downloadTitle}',
@@ -119,7 +101,7 @@ downloadButtons = """
           }
 """
 
-data_table_list_init_setup = Template("""
+DATA_TABLE_LIST_INIT_SETUP = Template("""
 <script type="text/javascript" id="js">
   $$(document).ready(function() {
       $$("#${tableName}").DataTable({
@@ -129,13 +111,13 @@ data_table_list_init_setup = Template("""
         bStateSave: true,
         bAutoWidth: false,
         buttons: [
-""" + downloadButtons + """
+""" + DOWNLOAD_BUTTONS + """
         ]
       });
 }); </script>
 """)
 
-data_table_list_with_columns_init_setup = Template("""
+DATA_TABLE_LIST_WITH_COLUMNS_INIT_SETUP = Template("""
 <script type="text/javascript" id="js">
   $(document).ready(function() {
     var table = $("#${tableName}").DataTable({
@@ -161,7 +143,7 @@ data_table_list_with_columns_init_setup = Template("""
             action: function ( e, dt, node, conf ) {
               clearFilters();
             }
-          },""" + downloadButtons + """
+          },""" + DOWNLOAD_BUTTONS + """
         ]
     });
 
@@ -211,7 +193,7 @@ data_table_list_with_columns_init_setup = Template("""
 """)
 
 
-data_table_large_list_init_setup = Template("""
+DATA_TABLE_LARGE_LIST_INIT_SETUP = Template("""
 <script type="text/javascript" id="js">
   $$(document).ready(function() {
       $$("#${tableName}").DataTable({
@@ -222,13 +204,13 @@ data_table_large_list_init_setup = Template("""
         bDeferRender: true,
         sAjaxSource: "${ajaxSrc}",
         buttons: [
-""" + downloadButtons + """
+""" + DOWNLOAD_BUTTONS + """
         ]
       });
 }); </script>
 """)
 
-data_table_large_list_with_columns_init_setup = Template("""
+DATA_TABLE_LARGE_LIST_WITH_COLUMNS_INIT_SETUP = Template("""
 <script type="text/javascript" id="js">
   $$(document).ready(function() {
       var table = $("#${tableName}").DataTable({
@@ -256,7 +238,7 @@ data_table_large_list_with_columns_init_setup = Template("""
               clearFilters();
             }
           },
-""" + downloadButtons + """
+""" + DOWNLOAD_BUTTONS + """
         ],
         fnInitComplete: function(oSettings, json) {
           var table = $("#${tableName}").DataTable();
@@ -305,7 +287,7 @@ data_table_large_list_with_columns_init_setup = Template("""
 }); </script>
 """)
 
-data_table_clear_filters = Template("""
+DATA_TABLE_CLEAR_FILTERS = Template("""
 <script type="text/javascript" id="js">
   function clearFilters() {
     var table = $('#${tableName}').DataTable();
@@ -319,7 +301,7 @@ data_table_clear_filters = Template("""
 </script>
 """)
 
-def data_table_record_init_setup(tableName):
+def dataTableRecordInitSetup(tableName):
   return """
 <script type="text/javascript" id="js">
   $(document).ready(function() {
@@ -334,13 +316,12 @@ def data_table_record_init_setup(tableName):
 }); </script>
 """ % tableName
 
-""" Some Utilitity functions for some TablelizedData
-"""
+
 def outputDataListTableHeader(output, tName, columns=None,
                               searchColumnNames=None, hideColumnNames=None):
-  output.write("%s\n" % data_table_reference)
+  output.write("%s\n" % DATA_TABLE_REFERENCE)
   if columns is None:
-    initSet = data_table_list_init_setup.substitute(tableName=tName, downloadTitle=tName)
+    initSet = DATA_TABLE_LIST_INIT_SETUP.substitute(tableName=tName, downloadTitle=tName)
   else:
     columnNames = []
     for col in columns:
@@ -356,20 +337,20 @@ def outputDataListTableHeader(output, tName, columns=None,
       hideColumnsStr = "||".join(hideColumns)
     else:
       hideColumnsStr = "false"
-    initSet = data_table_list_with_columns_init_setup.safe_substitute(tableName=tName.replace(" ", ""),
+    initSet = DATA_TABLE_LIST_WITH_COLUMNS_INIT_SETUP.safe_substitute(tableName=tName.replace(" ", ""),
                                                                       columnNames=",".join(columnNames),
                                                                       searchColumns="||".join(searchColumns),
                                                                       hideColumns=hideColumnsStr
                                                                       ,downloadTitle=tName)
   output.write("%s\n" % initSet)
-  clear_filters = data_table_clear_filters.safe_substitute(tableName=tName.replace(" ", ""))
-  output.write("%s\n" % clear_filters)
+  clearFilters = DATA_TABLE_CLEAR_FILTERS.safe_substitute(tableName=tName.replace(" ", ""))
+  output.write("%s\n" % clearFilters)
 
 def outputLargeDataListTableHeader(output, src, tName, columns=None,
                                    searchColumnNames=None, hideColumnNames=None):
-  output.write("%s\n" % data_table_reference)
+  output.write("%s\n" % DATA_TABLE_REFERENCE)
   if columns is None and searchColumnNames is None and hideColumnNames is None:
-    initSet = data_table_large_list_init_setup.substitute(ajaxSrc=src,
+    initSet = DATA_TABLE_LARGE_LIST_INIT_SETUP.substitute(ajaxSrc=src,
                                                           tableName=tName,
                                                           downloadTitle=tName)
   else:
@@ -382,7 +363,7 @@ def outputLargeDataListTableHeader(output, src, tName, columns=None,
     hideColumns = []
     for name in hideColumnNames:
       hideColumns.append("name == '" + name +"'")
-    initSet = data_table_large_list_with_columns_init_setup.safe_substitute(ajaxSrc=src,
+    initSet = DATA_TABLE_LARGE_LIST_WITH_COLUMNS_INIT_SETUP.safe_substitute(ajaxSrc=src,
                                                                             tableName=tName.replace(" ", ""),
                                                                             columnNames=",".join(columnNames),
                                                                             searchColumns="||".join(searchColumns),
@@ -390,28 +371,28 @@ def outputLargeDataListTableHeader(output, src, tName, columns=None,
                                                                             ,downloadTitle=tName)
   output.write("%s\n" % initSet)
 
-  clear_filters = data_table_clear_filters.safe_substitute(tableName=tName.replace(" ", ""))
-  output.write("%s\n" % clear_filters)
+  clearFilters = DATA_TABLE_CLEAR_FILTERS.safe_substitute(tableName=tName.replace(" ", ""))
+  output.write("%s\n" % clearFilters)
 
 def outputDataRecordTableHeader(output, tName):
-  output.write("%s\n" % data_table_reference)
-  initSet = data_table_record_init_setup(tName)
+  output.write("%s\n" % DATA_TABLE_REFERENCE)
+  initSet = dataTableRecordInitSetup(tName)
   output.write("%s\n" % initSet)
 
-def outputDataTableHeader(output, name_list, tName):
+def outputDataTableHeader(output, nameList, tName):
   output.write("<div id=\"demo\">")
   output.write("<table id=\"%s\" class=\"display\">\n" % tName.replace(" ", ""))
   output.write("<thead>\n")
   output.write("<tr>\n")
-  for name in name_list:
+  for name in nameList:
     output.write("<th>%s</th>\n" % name)
   output.write("</tr>\n")
   output.write("</thead>\n")
 
-def outputDataTableFooter(output, name_list, tName):
+def outputDataTableFooter(output, nameList, tName):
   output.write("<tfoot>\n")
   output.write("<tr>\n")
-  for name in name_list:
+  for name in nameList:
     output.write("<th>%s</th>\n" % name)
   output.write("</tr>\n")
   output.write("</tfoot>\n")
@@ -431,11 +412,11 @@ def outputFileEntryTableList(output, tName):
 """ % tName.replace(" ", ""))
 
 # This function expects a list of header names
-def outputCustomDataTableHeader(output, name_list, tName):
+def outputCustomDataTableHeader(output, nameList, tName):
   output.write("<div id=\"demo\">")
   output.write("<table id=\"%s\" class=\"display\">\n" % tName.replace(" ", ""))
   output.write("<thead>\n")
-  for name in name_list:
+  for name in nameList:
     output.write("<th>\n")
     output.write("%s\n" % name)
     output.write("</th>\n")

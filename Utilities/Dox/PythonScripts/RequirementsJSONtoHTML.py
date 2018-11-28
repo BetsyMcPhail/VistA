@@ -1,15 +1,28 @@
-import json
+#---------------------------------------------------------------------------
+# Copyright 2018 The Open Source Electronic Health Record Agent
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#---------------------------------------------------------------------------
+
 import argparse
+import json
 import os.path
-import cgi
-import sys
 
-from LogManager import logger
+from DataTableHtml import outputLargeDataListTableHeader, outputDataListTableHeader
+from DataTableHtml import outputDataRecordTableHeader
 from DataTableHtml import outputDataTableHeader, outputDataTableFooter
-from DataTableHtml import writeTableListInfo, outputDataListTableHeader
-from DataTableHtml import outputLargeDataListTableHeader, outputDataRecordTableHeader
 from DataTableHtml import outputFileEntryTableList, safeElementId
-
+from LogManager import logger
 
 def createArgParser():
     parser = argparse.ArgumentParser(description='VistA Requirements JSON to Html')
@@ -17,8 +30,9 @@ def createArgParser():
     parser.add_argument('outDir', help='path to the output web page directory')
     return parser
 
-fieldList = ["Name",'Id','Description',"BFFLink",'New Service Request','Type', 'Date Updated', "Update Status"]
-searchColumnList = ["Name",'Id','Description',"BFFLink",'New Service Request']
+FIELD_LIST = ['Name', 'Id', 'Description', 'BFFLink', 'New Service Request',
+              'Type', 'Date Updated', 'Update Status']
+SEARCH_COLUMN_LIST = ['Name', 'Id', 'Description', 'BFFLink', 'New Service Request']
 
 allReqs = []
 reqSummary=[]
@@ -31,6 +45,7 @@ def convertBFFLinks(linkList, reqEntry, **kargs):
         for entry in linkList:
           returnList.append('<a href="%s-%s.html">%s</a>' % (entry.replace('/','_'),"Req", entry))
         return returnList
+
 def convertNSRLinks(linkVal, reqEntry, **kargs):
         returnList = []
         if type(linkVal) is list:
@@ -40,7 +55,7 @@ def convertNSRLinks(linkVal, reqEntry, **kargs):
           returnList.append( '<a href="%s-%s.html">%s</a>' % (linkVal.split(":")[0],"Req", linkVal))
         return returnList
 
-summary_list_fields = [
+SUMMARY_LIST_FIELDS = [
     ('name', None, None),
     ('busNeedId', None, getReqHTMLLink),
     ('description', None, None),
@@ -50,13 +65,14 @@ summary_list_fields = [
     ('dateUpdated', None, None),
     ('recentUpdate', None, None)
 ]
+
 class RequirementsConverter:
     def __init__(self, outDir):
         self._outDir = outDir
 
     def _convertReqEntryToSummaryInfo(self, reqEntry):
-        summaryInfo = [""]*len(summary_list_fields)
-        for idx, id in enumerate(summary_list_fields):
+        summaryInfo = [""]*len(SUMMARY_LIST_FIELDS)
+        for idx, id in enumerate(SUMMARY_LIST_FIELDS):
             if id[1] and id[1] in reqEntry:
                 summaryInfo[idx] = reqEntry[id[1]]
             elif id[0] in reqEntry:
@@ -66,13 +82,14 @@ class RequirementsConverter:
         return summaryInfo
 
     def _reqEntryToHtml(self, output, reqJSON):
-        for idx, id in enumerate(summary_list_fields):
+        for idx, id in enumerate(SUMMARY_LIST_FIELDS):
             if id[0] in reqJSON: # we have this field
                 value = reqJSON[id[0]]
                 output.write ("<tr>\n")
-                output.write ("<td>%s</td>\n" % fieldList[idx])
+                output.write ("<td>%s</td>\n" % FIELD_LIST[idx])
                 output.write ("<td>%s</td>\n" % value)
                 output.write ("</tr>\n")
+
     def _generateIndividualRequirementsPage(self,reqJSON):
         ien = reqJSON['busNeedId']
         outReqFile = os.path.join(self._outDir, 'BFFReq-' + str(ien) + '.html')
@@ -88,7 +105,7 @@ class RequirementsConverter:
             outputFileEntryTableList(output, tName)
             """ table body """
             reqSummary = self._convertReqEntryToSummaryInfo(reqJSON)
-            for idx,item in enumerate(fieldList):
+            for idx,item in enumerate(FIELD_LIST):
                 output.write("<tr>\n")
                 # List of objects should be displayed as a UL object
                 output.write("<td>%s</td>"% item)
@@ -106,12 +123,14 @@ class RequirementsConverter:
             output.write("</div>\n")
             output.write("</div>\n")
             output.write ("</body></html>")
+
     def convertJsonToHtml(self, inputJsonFile):
         with open(inputJsonFile, 'r') as inputFile:
             inputJson = json.load(inputFile)
             self._generateRequirementsSummaryPage(inputJson)
 
-    def _generateRequirementsSummaryPageImpl(self, inputJson, listName, pkgName, isForAll=False):
+    def _generateRequirementsSummaryPageImpl(self, inputJson, listName,
+                                             pkgName, isForAll=False):
         outDir = self._outDir
         listName = listName.strip()
         pkgName = pkgName.strip()
@@ -123,8 +142,8 @@ class RequirementsConverter:
             output.write("<html>\n")
             tName = "%s-%s" % (listName.replace(' ', '_'), pkgName.replace(' ', '_'))
             useAjax = False #useAjaxDataTable(len(inputJson))
-            columnNames = fieldList
-            searchColumns = searchColumnList
+            columnNames = FIELD_LIST
+            searchColumns = SEARCH_COLUMN_LIST
             if useAjax:
                 ajaxSrc = '%s_array.txt' % pkgName
                 outputLargeDataListTableHeader(output, ajaxSrc, tName,
@@ -156,7 +175,7 @@ class RequirementsConverter:
                         allReqs.append(reqSummary)
                     else:
                       reqSummary = reqEntry
-                    for idx,item in enumerate(fieldList):
+                    for idx,item in enumerate(FIELD_LIST):
                         # List of objects should be displayed as a UL object
                         if type(reqSummary[idx]) is list:
                           output.write("<td><ul>")

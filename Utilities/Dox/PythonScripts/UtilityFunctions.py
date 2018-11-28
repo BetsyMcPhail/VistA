@@ -16,14 +16,8 @@
 
 import csv
 import json
-import logging
 import re
-import sys
 import urllib
-from LogManager import logger
-
-from PDFUtilityFunctions import *
-
 
 PACKAGE_MAP = {
     'AUTOMATED INFO COLLECTION SYS': 'Automated Information Collection System',
@@ -76,22 +70,6 @@ PACKAGE_MAP = {
     #  u'term.access'])
 } # this is the mapping between CUSTODIAL PACKAGE and packages in Dox
 
-sectionLinkObj = {
-    "Option": "19",
-    "Function": ".5",
-    "List_Manager_Templates": "409.61",
-    "Dialog": ".84",
-    "Key": "19.1",
-    "Remote_Procedure": "8994",
-    "Protocol": "101",
-    "Help_Frame": "9.2",
-    "Form": ".403",
-    "Sort_Template": ".401",
-    "HL7_APPLICATION_PARAMETER": "771",
-    "Input_Template": ".402",
-    "Print_Template": ".4"
-}
-
 COLOR_MAP = {
     "Option": "orangered",
     "Function": "royalblue",
@@ -135,8 +113,6 @@ def readIntoDictionary(infileName):
   with open(infileName,"r") as templateData:
     sniffer = csv.Sniffer()
     dialect = sniffer.sniff(templateData.read(1024))
-    templateData.seek(0)
-    hasHeader = sniffer.has_header(templateData.read(1024))
     templateData.seek(0)
     for index, line in enumerate(csv.reader(templateData,dialect)):
       if index == 0:

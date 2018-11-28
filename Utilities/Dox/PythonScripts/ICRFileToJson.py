@@ -208,11 +208,13 @@ class ICRFileToJson(object):
             prevSubFile = self._curStack[-1][1]
             if prevSubFile == subFile: # just continue with more of the same subfile
                 self._curStack[-1][0].setdefault(subFile, []).append(self._curRecord) # append the previous result
-                break;
-            else: # this is a different subfile # now check if it is a nested subfile
-                if isSubFileField(prevSubFile, subFile): # this is a nested subFile, push to stack
+                break
+            else: # this is a different subfile
+                # now check if it is a nested subfile
+                if isSubFileField(prevSubFile, subFile):
+                    # this is a nested subFile, push to stack
                     self._curStack.append((self._curRecord, subFile))
-                    break;
+                    break
                 else: # this is a different subFile now:
                     preStack = self._curStack.pop()
                     preStack[0].setdefault(preStack[1], []).append(self._curRecord)

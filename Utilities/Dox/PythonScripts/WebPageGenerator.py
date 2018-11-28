@@ -24,8 +24,6 @@ import os.path
 import re
 import shutil
 import string
-import subprocess
-import sys
 import urllib
 import cgi
 
@@ -35,17 +33,26 @@ from LogManager import logger, initLogging
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether
 from reportlab.platypus import Table, TableStyle, Image
 from reportlab.platypus import ListFlowable, ListItem
-from reportlab.lib.pagesizes import landscape, letter, inch
 from reportlab.lib import colors
+import reportlab.lib.pagesizes as pagesizes
+
 import io
 import PIL
 
-from CrossReferenceBuilder import CrossReferenceBuilder
-from CrossReferenceBuilder import createCrossReferenceLogArgumentParser
+import CrossReferenceBuilder
 from CrossReference import *
 
 from HTMLUtilityFunctions import FOOTER
-from UtilityFunctions import *
+from PDFUtilityFunctions import PDF_STYLESHEET
+from PDFUtilityFunctions import generatePDFTableHeader
+from UtilityFunctions import PACKAGE_MAP
+from UtilityFunctions import getViViaNURL, parseICRJson, readIntoDictionary
+from UtilityFunctions import findDotColor, getGlobalHtmlFileNameByName, getRoutineHtmlFileName
+from UtilityFunctions import getPackageDependencyHtmlFile
+from UtilityFunctions import getPackageGraphEdgePropsByMetrics
+from UtilityFunctions import getPackageHtmlFileName, getPackageObjHtmlFileName
+from UtilityFunctions import mergeAndSortDependencyListByPackage, normalizePackageName
+from UtilityFunctions import getRoutineHtmlFileNameUnquoted, normalizeGlobalName
 
 # constants
 DEFAULT_OUTPUT_LOG_FILE_NAME = "WebPageGen.log"
@@ -54,6 +61,22 @@ dataURLDict = {
   "DATA": "(IEN:<a href=\"%s\">%s</a>)",
   "XRF": "(XREF %s)",
   "HELP": "(HELP %s)"
+}
+
+SECTION_LINK_DICT = {
+    "Option": "19",
+    "Function": ".5",
+    "List_Manager_Templates": "409.61",
+    "Dialog": ".84",
+    "Key": "19.1",
+    "Remote_Procedure": "8994",
+    "Protocol": "101",
+    "Help_Frame": "9.2",
+    "Form": ".403",
+    "Sort_Template": ".401",
+    "HL7_APPLICATION_PARAMETER": "771",
+    "Input_Template": ".402",
+    "Print_Template": ".4"
 }
 
 COMPONENT_TYPE_DICT = {
@@ -536,12 +559,12 @@ def generatePDFTableRow(data):
 def generateParagraph(text):
     try:
         if text is None: text = ""
-        return Paragraph(text, styles['Heading6'])
+        return Paragraph(text, PDF_STYLESHEET['Heading6'])
     except UnicodeDecodeError as e:
         logger.warning("Failed to write to PDF:")
         logger.warning(text)
         logger.warning(e)
-        return Paragraph(unicode(text, errors='ignore'), styles['Heading6'])
+        return Paragraph(unicode(text, errors='ignore'), PDF_STYLESHEET['Heading6'])
 
 def generatePDFListData(listData):
     if not listData:
@@ -604,15 +627,15 @@ class WebPageGenerator:
       # Setup the pdf document
       self.buf = io.BytesIO()
       if isLandscape:
-        pagesize = letter
+        pagesize = pagesizes.letter
       else:
-        pagesize = landscape(letter)
+        pagesize = pagesizes.landscape(pagesizes.letter)
       self.doc = SimpleDocTemplate(self.buf,
-                                   rightMargin=inch/2,
-                                   leftMargin=inch/2,
-                                   topMargin=inch/2,
-                                   bottomMargin=inch/2,
-                                   pagesize=letter,
+                                   rightMargin=pagesizes.inch/2,
+                                   leftMargin=pagesizes.inch/2,
+                                   topMargin=pagesizes.inch/2,
+                                   bottomMargin=pagesizes.inch/2,
+                                   pagesize=pagesize,
                                   )
 
     def __writePDFFile__(self, pdf, pdfFileName):
@@ -713,7 +736,7 @@ class WebPageGenerator:
                           % (accordionClass, archName.split(" ")[0], archName, headerName))
         if pdf is not None and self._generatePDFBundle:
             pdf.append(Spacer(1, 20))
-            pdf.append(Paragraph(headerName, styles['Heading2']))
+            pdf.append(Paragraph(headerName, PDF_STYLESHEET['Heading2']))
 
 
     def queryICRInfo(self, package, type, val):
@@ -891,8 +914,8 @@ class WebPageGenerator:
     def generateGlobalNameIndexPage(self):
         indexList = [char for char in string.uppercase]
         sortedGlobals = [] # a list of list
-        for letter in indexList:
-            sortedGlobals.append([letter, letter])
+        for l in indexList:
+            sortedGlobals.append([l, l])
         for globalVar in self._allGlobals.itervalues():
             sortedName = globalVar.getName()[1:] # get rid of ^
             if sortedName.startswith('%') or sortedName.startswith('$'): # get rid of % and $
@@ -1192,7 +1215,7 @@ class WebPageGenerator:
                     self.__generateIndividualRoutinePage__(globalVar, pdf,
                                                            platform=None,
                                                            existingOutFile=outputFile,
-                                                           DEFAULT_HEADER_LIST=PACKAGE_OBJECT_SECTION_HEADER_LIST)
+                                                           defaultHeaderList=PACKAGE_OBJECT_SECTION_HEADER_LIST)
                     self.generateFooterWithNavigationBar(outputFile, indexList)
 
                 if self._generatePDFBundle:
@@ -2323,7 +2346,7 @@ class WebPageGenerator:
         outputFile.write("<h4>%s</h4><BR>\n" % key)
         if self._generatePDFBundle:
             paragraphs.append(Spacer(1, 1))
-            paragraphs.append(Paragraph(total, styles['Heading3']))
+            paragraphs.append(Paragraph(total, PDF_STYLESHEET['Heading3']))
             paragraphs.append(Spacer(1, 1))
             paragraphs.append(generateParagraph(key))
             paragraphs.append(Spacer(1, 10))
@@ -2401,12 +2424,12 @@ class WebPageGenerator:
 
     def __writePDFTitleBlock__(self, title, package, pdf, extraPDFHeader=None):
         if package is not None:
-            pdf.append(Paragraph("Package: %s" % package.getName(), styles['Heading4']))
+            pdf.append(Paragraph("Package: %s" % package.getName(), PDF_STYLESHEET['Heading4']))
             pdf.append(Spacer(1, 10))
         if extraPDFHeader:
-            pdf.append(Paragraph(extraPDFHeader, styles['Heading4']))
+            pdf.append(Paragraph(extraPDFHeader, PDF_STYLESHEET['Heading4']))
             pdf.append(Spacer(1, 10))
-        pdf.append(Paragraph(title, styles['Title']))
+        pdf.append(Paragraph(title, PDF_STYLESHEET['Title']))
 
     def _writeIndexTitleBlock(self, title, outputFile):
         title = "%s Index List" % title
@@ -2502,7 +2525,7 @@ class WebPageGenerator:
             return
         # Get image dimensions so can be scaled (if needed)
         im = PIL.Image.open(os.path.join(self._outDir, imageFileName))
-        width, height = letter
+        width, height = pagesizes.letter
         if im.width > width or im.height > height:
             rh = 1.0
             rw = 1.0
@@ -2515,7 +2538,7 @@ class WebPageGenerator:
             pdf.append(Image(os.path.join(self._outDir, imageFileName)))
 
     def __writePDFLegends__(self, pdf):
-        pdf.append(Paragraph("Legends:", styles['Heading3']))
+        pdf.append(Paragraph("Legends:", PDF_STYLESHEET['Heading3']))
         # No color legend in PDFs
         # TODO: Copy + paste from PC_LEGEND
         table = []
@@ -2528,7 +2551,7 @@ class WebPageGenerator:
    # TODO: Copy + paste XINDEXLegend
     def __writePDFXIndexLegend__(self, pdf):
         # TODO: Align left
-        pdf.append(Paragraph("Legend:", styles['Heading3']))
+        pdf.append(Paragraph("Legend:", PDF_STYLESHEET['Heading3']))
         table = []
         table.append([">>", "Not killed explicitly"])
         table.append(["*", "Changed"])
@@ -2628,7 +2651,7 @@ class WebPageGenerator:
             if len(routinesList) > 0:
                 indexList.append("Routines")
             generatePackageComponents = False
-            for keyVal in sectionLinkObj.keys():
+            for keyVal in SECTION_LINK_DICT.keys():
                   totalObjectDict = package.getAllPackageComponents(keyVal)
                   if not len(totalObjectDict) == 0:
                     generatePackageComponents = True
@@ -2788,7 +2811,7 @@ class WebPageGenerator:
 # Method to generate Package Components sections
 #==============================================================================
     def generatePackageComponentsSections(self, package, outputFile, pdf):
-        for keyVal in sectionLinkObj.keys():
+        for keyVal in SECTION_LINK_DICT.keys():
             totalObjectDict = package.getAllPackageComponents(keyVal)
             if len(totalObjectDict) == 0:
                 continue
@@ -2806,20 +2829,16 @@ class WebPageGenerator:
 #===============================================================================
 # method to generate Routine Dependency and Dependents page
 #===============================================================================
-    def generateRoutineDependencySection(self, routine, outputFile, pdf, isDependency=True):
-        routineName = routine.getName()
-        packageName = routine.getPackage().getName()
+    def generateRoutineDependencySection(self, routine, outputFile, pdf,
+                                         isDependency=True):
         if isDependency:
             depRoutines = routine.getCalledRoutines()
             sectionGraphHeader = "Call Graph"
             sectionListHeader = "Called Routines"
-            totalNum = routine.getTotalCalled()
         else:
             depRoutines = routine.getCallerRoutines()
             sectionGraphHeader = "Caller Graph"
             sectionListHeader = "Caller Routines"
-            routineSuffix = "_caller"
-            totalNum = routine.getTotalCaller()
         if not depRoutines:
           return
         self.__writeRoutineDepGraphSection__(routine, depRoutines,
@@ -2847,11 +2866,12 @@ class WebPageGenerator:
         datafill = (self.__getDataEntryDetailHtmlLink__(routine.getFileNo(),ien),ien)
       dataLink = dataURLDict[splitStr] % datafill
       return "<a href=\"#%s\">%s</a>%s" % (field,field,dataLink)
-    def generateRoutineVariableSection(self, outputFile, routine, sectionTitle, headerList, variables,
-                                       converFunc):
+
+    def generateRoutineVariableSection(self, outputFile, routine, sectionTitle,
+                                       headerList, variables, converFunc):
         self.writeSectionHeader(sectionTitle, sectionTitle, outputFile)
         outputList = converFunc(variables, routine=routine)
-        writeGenericTablizedHtmlData(headerList, outputList, outputFile)
+        self.writeGenericTablizedHtmlData(headerList, outputList, outputFile)
 
     def __convertRPCDataReference__(self, variables, routine=None):
         return self.__convertRtnDataReference__(variables, '8994')
@@ -2978,12 +2998,12 @@ class WebPageGenerator:
                                       isAccordion=False):
         # Do not write source file link in PDF
         self.writeSectionHeader(header, link, outputFile, None, isAccordion)
-        if routine._objType in sectionLinkObj.keys():
+        if routine._objType in SECTION_LINK_DICT.keys():
             outputFile.write("<div><p>")
             outputFile.write("<span class=\"information\">%s Information &lt;<a class=\"el\" href=\"%s%s/%s-%s.html\">%s</a>&gt;</span>"
                 % (routine._objType, VIVIAN_URL,
-                   sectionLinkObj[routine._objType].replace('.','_'),
-                   sectionLinkObj[routine._objType],
+                   SECTION_LINK_DICT[routine._objType].replace('.','_'),
+                   SECTION_LINK_DICT[routine._objType],
                    routine.getIEN(), routine.getOriginalName()))
             outputFile.write("</p></div>\n")
         else:
@@ -3105,7 +3125,7 @@ class WebPageGenerator:
                 line = re.sub(r'<.*?>', "", line)
                 line = re.sub(r'<.*?', "", line)
                 if self._generatePDFBundle:
-                    pdfVal.append(Paragraph(line, styles['Heading6']))
+                    pdfVal.append(Paragraph(line, PDF_STYLESHEET['Heading6']))
             row.append(val)
             row.append(self.__generateICRInformation__(entryPoints[entry]["icr"]))
             tableData.append(row)
@@ -3234,7 +3254,7 @@ class WebPageGenerator:
           totalNum = routine.getTotalCaller()
       if self._generatePDFBundle:
         paragraphs = []
-        paragraphs.append(Paragraph("%s Total: %d" % (header, totalNum), styles['Heading3']))
+        paragraphs.append(Paragraph("%s Total: %d" % (header, totalNum), PDF_STYLESHEET['Heading3']))
       writeSubSectionHeader("%s Total: %d" % (header, totalNum), outputFile)
       tableHeader = ["Package", "Total", header]
       tableData = []  # html
@@ -3296,7 +3316,7 @@ class WebPageGenerator:
     def __generateIndividualRoutinePage__(self, routine, pdf, platform=None,
                                           existingOutFile=None,
                                           fileNameGenerator=getRoutineHtmlFileNameUnquoted,
-                                          DEFAULT_HEADER_LIST=DEFAULT_VARIABLE_SECTION_HEADER_LIST):
+                                          defaultHeaderList=DEFAULT_VARIABLE_SECTION_HEADER_LIST):
         assert routine
         routineName = routine.getName()
         # This is a list of sections that might be applicable to a routine
@@ -3345,7 +3365,7 @@ class WebPageGenerator:
              "name": "External References", # this is also the link name
              "data" : routine.getExternalReference, # the data source
              "generator" : self.__writeRoutineVariableSection__, # section generator
-             "geneargs" : [DEFAULT_HEADER_LIST,
+             "geneargs" : [defaultHeaderList,
                            self.__convertExternalReferenceToTableData__], # extra argument
              "classid"  :"external"
            },
@@ -3409,7 +3429,7 @@ class WebPageGenerator:
              "name": "Naked Globals", # this is also the link name
              "data" : routine.getNakedGlobals, # the data source
              "generator" : self.__writeRoutineVariableSection__, # section generator
-             "geneargs" : [DEFAULT_HEADER_LIST,
+             "geneargs" : [defaultHeaderList,
                            self.__convertNakedGlobaToTableData__], # extra argument
              "classid"  :"naked"
            },
@@ -3418,7 +3438,7 @@ class WebPageGenerator:
              "name": "Local Variables", # this is also the link name
              "data" : routine.getLocalVariables, # the data source
              "generator" : self.__writeRoutineVariableSection__, # section generator
-             "geneargs" : [DEFAULT_HEADER_LIST,
+             "geneargs" : [defaultHeaderList,
                            self.__convertVariableToTableData__], # extra argument
              "classid"  :"local"
            },
@@ -3427,7 +3447,7 @@ class WebPageGenerator:
              "name": "Marked Items", # this is also the link name
              "data" : routine.getMarkedItems, # the data source
              "generator" : self.__writeRoutineVariableSection__, # section generator
-             "geneargs" : [DEFAULT_HEADER_LIST,
+             "geneargs" : [defaultHeaderList,
                            self.__convertMarkedItemToTableData__], # extra argument
              "classid"  :"marked"
            },
@@ -3499,7 +3519,7 @@ class WebPageGenerator:
 #===============================================================================
     def __writePackageComponentSourceSection__(self, routine, data, header,
                                                link, outputFile, pdf, classid=""):
-        fileNo = sectionLinkObj[routine.getObjectType()]
+        fileNo = SECTION_LINK_DICT[routine.getObjectType()]
         sourcePath = os.path.join(self._outDir,"..",fileNo.replace(".",'_'),fileNo+"-"+routine.getIEN()+".html")
         self.writeSectionHeader(header, link, outputFile, pdf, isAccordion=False)
         try:
@@ -3723,7 +3743,7 @@ class WebPageGenerator:
                 self.__writePDFFile__(pdf, pdfFileName)
 
     def generatePackageInformationPages(self):
-        for keyVal in sectionLinkObj.keys():
+        for keyVal in SECTION_LINK_DICT.keys():
           logger.info("Start generating all individual %s......" % keyVal)
           for package in self._allPackages.itervalues():
             for routine in package.getAllPackageComponents(keyVal).itervalues():
@@ -3768,7 +3788,7 @@ $( document ).ready(function() {
             self._writeIndexTitleBlock("Package Component", outputFile)
             outputFile.write(PC_LEGEND)
             outputFile.write("<div><label for=\"componentSelector\">Select Package Component Type:</label></div>")
-            allObjects = sorted(sectionLinkObj.keys())
+            allObjects = sorted(SECTION_LINK_DICT.keys())
             outputFile.write("<select id='componentSelector'>")
             for objectKey in allObjects:
                 outputFile.write("<option class=\"IndexKey\">%s</option>" % objectKey.replace("_"," "))
@@ -3819,12 +3839,12 @@ def run(args):
     VIVIAN_URL = getViViaNURL(args.local)
     icrJsonFile = os.path.abspath(args.icrJsonFile)
     parsedICRJSON = parseICRJson(icrJsonFile)
-    crossRef = CrossReferenceBuilder().buildCrossReferenceWithArgs(args,
-                                                                   icrJson=parsedICRJSON,
-                                                                   inputTemplateDeps=readIntoDictionary(args.inputTemplateDep),
-                                                                   sortTemplateDeps=readIntoDictionary(args.sortTemplateDep),
-                                                                   printTemplateDeps=readIntoDictionary(args.printTemplateDep)
-                                                                   )
+    crossRef = CrossReferenceBuilder.buildCrossReferenceWithArgs(args,
+                                                                 icrJson=parsedICRJSON,
+                                                                 inputTemplateDeps=readIntoDictionary(args.inputTemplateDep),
+                                                                 sortTemplateDeps=readIntoDictionary(args.sortTemplateDep),
+                                                                 printTemplateDeps=readIntoDictionary(args.printTemplateDep)
+                                                                 )
     logger.info ("Starting generating web pages....")
     doxDir = os.path.join(args.patchRepositDir, 'Utilities/Dox')
     webPageGen = WebPageGenerator(crossRef,
@@ -3839,7 +3859,7 @@ def run(args):
     logger.info ("End of generating web pages....")
 
 if __name__ == '__main__':
-    crossRefArgParse = createCrossReferenceLogArgumentParser()
+    crossRefArgParse = CrossReferenceBuilder.createCrossReferenceLogArgumentParser()
     parser = argparse.ArgumentParser(
         description='VistA Visual Cross-Reference Documentation Generator',
         parents=[crossRefArgParse])

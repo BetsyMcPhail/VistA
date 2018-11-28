@@ -14,33 +14,32 @@
 # limitations under the License.
 # ---------------------------------------------------------------------------
 
-import glob
-import re
-import csv
-import os
-import sys
 import argparse
+import csv
+import glob
+import os
+import re
+import sys
+
+from CrossReference import CrossReference, Global, Package
+from CrossReference import PlatformDependentGenericRoutine, Routine
+from LogManager import logger
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.normpath(os.path.join(FILE_DIR, "../../../Scripts"))
 if SCRIPTS_DIR not in sys.path:
   sys.path.append(SCRIPTS_DIR)
 
-from CrossReference import CrossReference, Routine, Package, Global, PlatformDependentGenericRoutine
-from LogManager import logger
-
 A_ROUTINE_EX = re.compile("^A[0-9][^ ]+$")
 ZWR_FILENO_REGEX = re.compile("(?P<fileNo>^[0-9.]+)(-1)?\+(?P<des>.*)\.zwr$")
 ZWR_NAMESPACE_REGEX = re.compile("(?P<namespace>^[^.]+)\.zwr$")
 
-fileNoPackageMappingDict = {"18.02":"Web Services Client",
-                   "18.12":"Web Services Client",
-                   "18.13":"Web Services Client",
-                   "52.87":"Outpatient Pharmacy",
-                   "59.73":"Pharmacy Data Management",
-                   "59.74":"Pharmacy Data Management"
-                   }
-
+FILE_NO_PACKAGE_MAPPING_DICT = {"18.02":"Web Services Client",
+                                "18.12":"Web Services Client",
+                                "18.13":"Web Services Client",
+                                "52.87":"Outpatient Pharmacy",
+                                "59.73":"Pharmacy Data Management",
+                                "59.74":"Pharmacy Data Management"}
 
 def getVDLHttpLinkByID(vdlId):
   return "https://www.va.gov/vdl/application.asp?appid=%s" % vdlId
@@ -64,7 +63,6 @@ class InitCrossReferenceGenerator(object):
     result = csv.DictReader(open(packageFilename, 'rb'))
     crossRef = self.crossRef
     currentPackage = None
-    index = 0
     for row in result:
       packageName = row['Directory Name']
       if packageName:
@@ -80,9 +78,9 @@ class InitCrossReferenceGenerator(object):
         if not currentPackage:
           logger.warn("row is not under any package: %s" % row)
           continue
-      if len(row['Prefixes']):
+      if row['Prefixes']:
         currentPackage.addNamespace(row['Prefixes'])
-      if len(row['Globals']):
+      if row['Globals']:
         currentPackage.addGlobalNamespace(row['Globals'])
     logger.info("Total # of Packages is %d" % (len(crossRef.getAllPackages())))
 
@@ -163,7 +161,6 @@ class InitCrossReferenceGenerator(object):
         if lineNo >= 2:
           info = line.strip().split('=')
           globalName = info[0]
-          detail = info[1].strip("\"")
           if globalName.find(',') > 0:
               result = globalName.split(',')
               if len(result) == 2 and result[1] == "0)":
@@ -182,7 +179,7 @@ class InitCrossReferenceGenerator(object):
       globalVar = Global(globalName, fileNo, globalDes,
                          allPackages.get(packageName))
       try:
-        fileNum = float(globalVar.getFileNo())
+        float(globalVar.getFileNo())
       except ValueError, es:
         logger.error("error: %s, globalVar:%s file %s" % (es, globalVar, file))
         continue
@@ -204,8 +201,8 @@ class InitCrossReferenceGenerator(object):
     for key in sortedKeyList:
       globalVar = allGlobals[key]
       # fix the uncategoried item
-      if globalVar.getFileNo() in fileNoPackageMappingDict:
-          globalVar.setPackage(allPackages[fileNoPackageMappingDict[globalVar.getFileNo()]])
+      if globalVar.getFileNo() in FILE_NO_PACKAGE_MAPPING_DICT:
+          globalVar.setPackage(allPackages[FILE_NO_PACKAGE_MAPPING_DICT[globalVar.getFileNo()]])
       crossReference.addGlobalToPackage(globalVar,
                                         globalVar.getPackage().getName())
 
@@ -231,7 +228,7 @@ class InitCrossReferenceGenerator(object):
       crossReference.addRoutineToPackageByName(routineName, packageName)
       if needRename:
         routine = crossReference.getRoutineByName(routineName)
-        assert(routine)
+        assert routine
         routine.setOriginalName(origName)
       if A_ROUTINE_EX.search(routineName):
         pass

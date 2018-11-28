@@ -15,8 +15,6 @@
 #---------------------------------------------------------------------------
 import os
 import sys
-import re
-from datetime import datetime
 
 from LogManager import logger
 
@@ -80,7 +78,7 @@ class GlobalNode(object):
   def keys(self):
     return self.child.keys()
   def values(self):
-    return self.child.value()
+    return self.child.values()
   def getIndex(self):
     if self.parent:
       if self.parent.isRoot():
@@ -119,7 +117,7 @@ def getKeys(globalRoot, func=int):
   outKey = []
   for key in globalRoot:
     try:
-      idx = func(key)
+      func(key)
       outKey.append(key)
     except ValueError:
       pass
@@ -128,8 +126,8 @@ def getKeys(globalRoot, func=int):
 
 def createGlobalNodeByZWRFile(inputFileName):
   globalRoot = None
-  with open(inputFileName, "r") as input:
-    for idx, line in enumerate(input,0):
+  with open(inputFileName, "r") as file:
+    for idx, line in enumerate(file, 0):
       if idx <=1:
         continue
       line = line.strip('\r\n')
@@ -198,7 +196,7 @@ class DefaultZWRRootGenerator(object):
       if result is None:
         self.inputFile.close()
         raise StopIteration
-      if result == True:
+      if result == True:  # Need to check for explicitly True
         continue
       if result:
         return result
@@ -294,7 +292,7 @@ def createGlobalNode(nodeIndex, nodeValue, nodeRoot, globalRoot=None):
   """
   retRoot = globalRoot
   if nodeIndex:
-    if nodeValue and len(nodeValue) > 0:
+    if nodeValue:
       nodeValue = nodeValue.replace('""', '"')
     if not globalRoot:
       retRoot = GlobalNode(subscript=nodeRoot)

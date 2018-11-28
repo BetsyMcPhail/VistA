@@ -13,27 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #---------------------------------------------------------------------------
+import argparse
+import glob
+import json
 import os
 import sys
-import re
-from datetime import datetime
-import glob
-import cgi
-import re
-import json
-import argparse
+
+from DataTableHtml import outputCustomDataTableHeader, outputDataListTableHeader
+from InitCrossReferenceGenerator import createInitialCrossRefGenArgParser
+from InitCrossReferenceGenerator import parseCrossRefGeneratorWithArgs
+from LogManager import initLogging, logger
+from UtilityFunctions import getPackageHtmlFileName
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.normpath(os.path.join(FILE_DIR, "../../../Scripts"))
 if SCRIPTS_DIR not in sys.path:
   sys.path.append(SCRIPTS_DIR)
 crossRef = None
-from InitCrossReferenceGenerator import createInitialCrossRefGenArgParser, parseCrossRefGeneratorWithArgs
-from CrossReference import CrossReference
-from UtilityFunctions import getPackageHtmlFileName
-from DataTableHtml import outputDataTableHeader, outputCustomDataTableHeader, outputDataTableFooter
-from DataTableHtml import outputDataListTableHeader
-from LogManager import initLogging, logger
 
 def generateListingPage(outDir, pageData, dataType):
     outDir = os.path.join(outDir, dataType.replace(".","_"))

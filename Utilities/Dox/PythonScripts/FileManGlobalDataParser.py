@@ -13,28 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #---------------------------------------------------------------------------
-import os
-import sys
-import re
-import subprocess
-from datetime import datetime
-import json
 
-from CrossReference import FileManField
-from ZWRGlobalParser import getKeys, sortDataEntryFloatFirst
-from ZWRGlobalParser import convertToType, createGlobalNodeByZWRFile
-from ZWRGlobalParser import readGlobalNodeFromZWRFileV2
-from FileManSchemaParser import FileManSchemaParser
-from UtilityFunctions import getDOXURL, getViViaNURL
-from LogManager import initLogging, logger
-from FileManDateTimeUtil import fmDtToPyDt
-from PatchOrderGenerator import PatchOrderGenerator
 import glob
+import json
+import os
+import re
+import sys
+
+from datetime import datetime
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.normpath(os.path.join(FILE_DIR, "../../../Scripts"))
 if SCRIPTS_DIR not in sys.path:
   sys.path.append(SCRIPTS_DIR)
+
+from CrossReference import FileManField
+from FileManDateTimeUtil import fmDtToPyDt
+from FileManSchemaParser import FileManSchemaParser
+from LogManager import initLogging, logger
+from UtilityFunctions import getDOXURL, getViViaNURL
+from ZWRGlobalParser import convertToType, createGlobalNodeByZWRFile
+from ZWRGlobalParser import getKeys, sortDataEntryFloatFirst
+from ZWRGlobalParser import readGlobalNodeFromZWRFileV2
 
 """ These are used to capture install entries that don't use the
 package prefix as their install name or have odd capitalization
@@ -89,16 +89,12 @@ def getMumpsRoutine(mumpsCode):
     via regular expression.
     return an iterator with (routine, tag, rtnpos)
   """
-  pos = 0
-  endpos = 0
   for result in REGEX_RTN_CODE.finditer(mumpsCode):
     if result:
       routine = result.group('rtn')
       if routine:
         tag = result.group('tag')
         start, end = result.span('rtn')
-        endpos = result.end()
-        pos = endpos
         yield (routine, tag, start)
   raise StopIteration
 
@@ -429,7 +425,6 @@ class FileManGlobalDataParser(object):
 
   def _updateHL7Reference(self):
     protocol = self._glbData['101']
-    outJSON = {}
     for ien in sorted(protocol.dataEntries.keys(), key=lambda x: float(x)):
       protocolEntry = protocol.dataEntries[ien]
       if '4' in protocolEntry.fields:
@@ -746,11 +741,6 @@ class FileManGlobalDataParser(object):
         return self._fileKeyIndex[fileNo][ien]
     return None
 
-  def _addFileFieldMap(self, fileNo, ien, value):
-    fldDict = self._fileKeyIndex.setdefault(fileNo, {})
-    if ien not in ienDict:
-      ienDict[ien] = value
-
   def _parseSubFileField(self, dataRoot, fieldAttr, outDataEntry):
     subFile = fieldAttr.getPointedToSubFile()
     if fieldAttr.hasSubType(FileManField.FIELD_TYPE_WORD_PROCESSING):
@@ -827,11 +817,9 @@ def run(args):
     if len(fileSet) > 1:
       for file in fileSet:
         zwrFile = glbDataParser.allFiles[file]['path']
-        globalSub = glbDataParser.allFiles[file]['name']
         glbDataParser.generateFileIndex(zwrFile, file)
     for file in fileSet:
       zwrFile = glbDataParser.allFiles[file]['path']
-      globalSub = glbDataParser.allFiles[file]['name']
       logger.info("Parsing file: %s at %s" % (file, zwrFile))
       glbDataParser.parseZWRGlobalFileBySchemaV2(zwrFile, file)
       htmlGen.outputFileManDataAsHtml(glbDataParser)
@@ -839,24 +827,24 @@ def run(args):
 
   glbDataParser.outRtnReferenceDict()
 
-def horologToDateTime(input):
+def horologToDateTime(val):
   """
     convert Mumps Horolog time to python datatime
   """
   from datetime import timedelta
   originDt = datetime(1840,12,31,0,0,0)
-  if input.find(',') < 0: # invalid format
+  if val.find(',') < 0: # invalid format
     return None
-  days, seconds = input.split(',')
+  days, seconds = val.split(',')
   return originDt + timedelta(int(days), int(seconds))
 
-def normalizeGlobalLocation(input):
-  if not input:
-    return input
-  result = input
-  if input[0] != '^':
+def normalizeGlobalLocation(val):
+  if not val:
+    return val
+  result = val
+  if val[0] != '^':
     result = '^' + result
-  if input[-1] == ',':
+  if val[-1] == ',':
     result = result[0:-1]
   return result
 

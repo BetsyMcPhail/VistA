@@ -18,7 +18,7 @@ from reportlab.platypus import Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 
 # PDF stylesheet
-styles = getSampleStyleSheet()
+PDF_STYLESHEET = getSampleStyleSheet()
 
 def generatePDFTableHeader(headerList, splitHeader=True):
     row = []
@@ -28,8 +28,8 @@ def generatePDFTableHeader(headerList, splitHeader=True):
             # TODO: There is an extra line between words
             words = header.split(" ")
             for word in words:
-                cell.append(Paragraph(word, styles['Heading4']))
+                cell.append(Paragraph(word, PDF_STYLESHEET['Heading4']))
         else:
-            cell.append(Paragraph(header, styles['Heading4']))
+            cell.append(Paragraph(header, PDF_STYLESHEET['Heading4']))
         row.append(cell)
     return row

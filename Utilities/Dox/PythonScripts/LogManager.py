@@ -44,9 +44,6 @@ def initLogging(outputDir, outputFileName):
                       logging.DEBUG, formatter)
     _setupConsoleLogging(logging.WARNING, formatter)
 
-def _getTempLogFile(filename):
-    return os.path.join(tempfile.gettempdir(), filename)
-
 def _setupFileLogging(filename, level, formatter):
     fileHandler = logging.FileHandler(filename, 'a')
     fileHandler.setLevel(level)

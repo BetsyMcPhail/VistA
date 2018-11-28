@@ -26,20 +26,20 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import letter, inch
 from reportlab.lib import colors
 
-from InitCrossReferenceGenerator import parseCrossReferenceGeneratorArgs
-from FileManGlobalDataParser import generateSingleFileFieldToIenMappingBySchema
-from LogManager import logger
-from ICRSchema import ICR_FILE_KEYWORDS_LIST, RPC_FILE_NO, RPC_NAME_FIELD_NO
-from ICRSchema import isSubFile, isWordProcessingField, SUBFILE_FIELDS
-from UtilityFunctions import getPackageHtmlFileName, getGlobalHtmlFileNameByName
-from UtilityFunctions import getRoutineHtmlFileName
-from UtilityFunctions import PACKAGE_MAP, normalizePackageName
-from UtilityFunctions import generatePDFTableHeader
-from UtilityFunctions import getDOXURL, getViViaNURL
 from DataTableHtml import outputDataTableHeader, outputDataTableFooter
 from DataTableHtml import outputDataListTableHeader
 from DataTableHtml import outputLargeDataListTableHeader, outputDataRecordTableHeader
 from DataTableHtml import outputFileEntryTableList, safeElementId
+from ICRSchema import ICR_FILE_KEYWORDS_LIST, RPC_FILE_NO, RPC_NAME_FIELD_NO
+from ICRSchema import isSubFile, isWordProcessingField, SUBFILE_FIELDS
+from InitCrossReferenceGenerator import parseCrossReferenceGeneratorArgs
+from FileManGlobalDataParser import generateSingleFileFieldToIenMappingBySchema
+from LogManager import logger
+from PDFUtilityFunctions import generatePDFTableHeader
+from UtilityFunctions import getPackageHtmlFileName, getGlobalHtmlFileNameByName
+from UtilityFunctions import getRoutineHtmlFileName
+from UtilityFunctions import PACKAGE_MAP, normalizePackageName
+from UtilityFunctions import getDOXURL, getViViaNURL
 
 # PDF stylesheet
 STYLES = getSampleStyleSheet()
