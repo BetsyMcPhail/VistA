@@ -31,7 +31,7 @@ import argparse
 from datetime import datetime, date, time
 from CrossReference import CrossReference, Routine, Package, Global, PlatformDependentGenericRoutine, PackageComponent #Option, Function
 from CrossReference import LocalVariable, GlobalVariable, NakedGlobal, MarkedItem, LabelReference
-from CrossReference import RoutineCallInfo, getAlternateGlobalName, getTopLevelGlobalName
+from CrossReference import getAlternateGlobalName, getTopLevelGlobalName
 
 from LogManager import logger
 
@@ -288,10 +288,14 @@ class GlobalVarSectionParser (AbstractSectionParser):
         Routine.addGlobalVariables(GlobalVariable(self._varName,
                                                   self._varPrefix,
                                                   self._varValue))
+
     def __postParsing__(self, Routine, CrossReference):
         globalVar = CrossReference.getGlobalByName(self._varName)
         if not globalVar:
             globalVar = CrossReference.addNonFileManGlobalByName(self._varName)
+            if globalVar is None:
+                logger.error("Failed postParsing for %s" % self._varName)
+                return
         routineName = Routine.getName()
         # case to handle the platform dependent routines
         if CrossReference.isPlatformDependentRoutineByName(routineName):
@@ -302,6 +306,7 @@ class GlobalVarSectionParser (AbstractSectionParser):
         else:
             globalVar.addReferencedRoutine(Routine)
         Routine.addReferredGlobal(globalVar)
+
 #===============================================================================
 # Implementation of a section logFileParser to parse the Naked Globals part
 #===============================================================================
@@ -656,7 +661,7 @@ class XINDEXLogFileParser (IXindexLogFileParser, ISectionParser):
                            (routineName, renamedRoutineName))
               return False
           self._curRoutine = self._crossRef.getRoutineByName(renamedRoutineName)
-          self._curRoutine._structuredCode = structuredSource
+          self._curRoutine.structuredCode = structuredSource
           self._curPackage = self._curRoutine.getPackage()
           return True
         match = VALID_OBJECT.search(routineName).group("name")

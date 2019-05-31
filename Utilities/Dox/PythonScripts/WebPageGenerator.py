@@ -2073,7 +2073,7 @@ class WebPageGenerator:
                     outputFile.write("<div id='pageCommands' style='background: white;'>")
                     outputFile.write("  <a href=\"%s\">Go to the documentation of this file.</a>" %
                                      getPackageComponentLink(routine))
-                    if routine._structuredCode:
+                    if routine.structuredCode:
                       outputFile.write(SWAP_VIEW_HTML)
                     outputFile.write('</div>')
                     outputFile.write("<div id=\"terseDisplay\">")
@@ -2142,10 +2142,10 @@ class WebPageGenerator:
             routine.addEntryPoint(entry, comment, icrJson)
 
             outputFile.write("</div>\n")
-            if routine._structuredCode:
+            if routine.structuredCode:
               outputFile.write("<div id=\"expandedDisplay\" style='display:none;'>")
               lineNo = 1
-              for line in routine._structuredCode:
+              for line in routine.structuredCode:
                 #if "^" in line:
                 rtnLinks = routineCallExpanded.search(line)
                 if rtnLinks:
